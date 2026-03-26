@@ -37,7 +37,7 @@ LABELS = torch.tensor(arrays["recojet_isB"], dtype=torch.long)
 def wrap_phi(dphi):
     return (dphi + np.pi) % (2*np.pi) - np.pi
 
-def jet_to_tensor(arrays, i, N_max=64, eps=1e-6):
+def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     jet_pt  = arrays["jet_p"][i]
     jet_eta = arrays["jet_theta"][i]
     jet_phi = arrays["jet_phi"][i]
@@ -63,7 +63,7 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-6):
     if n == 0:
         return x, mask
 
-    x[:n, 0] = np.log(pt[:n] / jet_pt + eps)
+    x[:n, 0] = np.log10(pt[:n] / jet_pt + eps)
     x[:n, 1] = eta[:n] - jet_eta
     x[:n, 2] = wrap_phi(phi[:n] - jet_phi)
     x[:n, 3] = q[:n]
