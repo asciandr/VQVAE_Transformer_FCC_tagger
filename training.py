@@ -3,8 +3,8 @@
 ### job handles ###
 n_classes=2
 # training of unsupervised VQ-VAE tokenizer
-n_epochs=1
-#n_epochs=20
+#n_epochs=1
+n_epochs=20
 # training of Transformer-based classifier
 train_transformer=False
 m_epochs=20
@@ -22,11 +22,11 @@ data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="
 
 val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_location="cpu")
 
-X           = data["X"]        # [N, N_max, 6]
+X           = data["X"]        # [N, N_max, 5]
 MASK        = data["mask"] # [N, N_max]
 LABELS      = data["labels"]
 
-val_X       = val_data["X"]        # [N, N_max, 6]
+val_X       = val_data["X"]        # [N, N_max, 5]
 val_MASK    = val_data["mask"] # [N, N_max]
 val_LABELS  = val_data["labels"]
 
@@ -129,9 +129,9 @@ class VectorQuantizerEMA(nn.Module):
         return z_q, indices.view(z.shape[:-1]), commit_loss
 
 class JetVQVAE(nn.Module):
-    #def __init__(self, F=6, D=32, K=256):
-    #def __init__(self, F=6, D=32, K=64):
-    def __init__(self, F=6, D=16, K=16):
+    #def __init__(self, F=5, D=32, K=256):
+    #def __init__(self, F=5, D=32, K=64):
+    def __init__(self, F=5, D=16, K=16):
         super().__init__()
 
         self.encoder = nn.Sequential(
