@@ -31,7 +31,7 @@ njets = len(arrays["jet_p"])
 print("njets:\t"+str(njets))
 
 print("torch zeros")
-X = torch.zeros((njets, N_MAX, 6), dtype=torch.float32)
+X = torch.zeros((njets, N_MAX, 5), dtype=torch.float32)
 MASK = torch.zeros((njets, N_MAX), dtype=torch.float32)
 LABELS = torch.tensor(arrays["recojet_isB"], dtype=torch.long)
 
@@ -58,7 +58,7 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
 
     n = min(len(pt), N_max)
 
-    x = np.zeros((N_max, 6), dtype=np.float32)
+    x = np.zeros((N_max, 5), dtype=np.float32)
     mask = np.zeros(N_max, dtype=np.float32)
 
     if n == 0:
@@ -89,6 +89,6 @@ torch.save(
     },
     #"valHcc_fcc_ee_jets_pf.pt"
     #"fcc_ee_jets_pf.pt"
-    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_jets_pf.pt"
+    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_20kjets_pf.pt"
 )
 
