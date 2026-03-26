@@ -3,6 +3,7 @@
 ### job handles ###
 n_classes=2
 # training of unsupervised VQ-VAE tokenizer
+#n_epochs=1
 n_epochs=20
 # training of Transformer-based classifier
 m_epochs=20
@@ -55,7 +56,7 @@ loader = torch.utils.data.DataLoader(
 #    batch_size=64,
     batch_size=256,
     shuffle=True,
-    num_workers=4,
+    num_workers=0,
     pin_memory=False
     #pin_memory=True
 )
@@ -64,8 +65,9 @@ val_loader = torch.utils.data.DataLoader(
     val_dataset,
     batch_size=256,
     shuffle=False,     # IMPORTANT
-    num_workers=4,
-    pin_memory=True
+    num_workers=0,
+    pin_memory=False
+    #pin_memory=True
 )
 
 import torch
@@ -255,7 +257,7 @@ plt.scatter(range(K), token_charge)
 plt.axhline(0, color="gray", linestyle="--")
 plt.xlabel("Token ID")
 plt.ylabel("Mean charge")
-plt.title("Token ↔ charge")
+plt.title("Token charge")
 plt.savefig('token_charge.png')
 
 print("Now token <-> momentum scale.")
@@ -273,8 +275,8 @@ plt.figure(figsize=(6,4))
 plt.scatter(range(K), token_logpt)
 plt.axhline(0, color="gray", linestyle="--")
 plt.xlabel("Token ID")
-plt.ylabel("Mean log(p[GeV])")
-plt.title("Token ↔ momentum scale")
+plt.ylabel("Mean log10(p/p_jet)")
+plt.title("Token momentum scale")
 plt.savefig('token_momentum_scale.png')
 
 # Missing jet_p in data loader
@@ -425,6 +427,7 @@ for epoch in range(m_epochs):
 
         loss.backward()
         optimizer.step()
+#    print(torch.cuda.memory_allocated() / 1024**3)
 
     print(f"Epoch {epoch}: loss = {loss.item():.4f}")
 
