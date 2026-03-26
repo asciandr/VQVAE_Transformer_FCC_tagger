@@ -3,9 +3,10 @@
 ### job handles ###
 n_classes=2
 # training of unsupervised VQ-VAE tokenizer
-#n_epochs=1
-n_epochs=20
+n_epochs=1
+#n_epochs=20
 # training of Transformer-based classifier
+train_transformer=False
 m_epochs=20
 
 ###########################################
@@ -300,135 +301,139 @@ plt.savefig('token_momentum_scale.png')
 ##plt.title("Token stability vs jet pT")
 ##plt.savefig('token_stability_jet_p.png')
 
-##################################################
-#### STEP 2: CONVERT JETS TO TOKEN SEQUENCES  ####
-##################################################
+### Make post-VQ-VAE part
+### of trainings optional
+if train_transformer:
 
-#Tokenization function
-def tokenize_batch(model, x, mask):
-    with torch.no_grad():
-        z = model.encoder(x)
-        z_real = z[mask.bool()]
-        _, tokens, _ = model.vq(z_real)
-
-        # rebuild padded token tensor
-        token_tensor = torch.zeros_like(mask, dtype=torch.long)
-        token_tensor[mask.bool()] = tokens
-
-    return token_tensor
-
-#Build token dataset (offline step)
-print("Build token dataset.")
-all_tokens = []
-all_masks = []
-all_labels = []
-
-model.eval()
-
-for x, mask, labels in loader:
-    x = x.cuda()
-    mask = mask.cuda()
-
-    tokens = tokenize_batch(model, x, mask)
-
-    all_tokens.append(tokens.cpu())
-    all_masks.append(mask.cpu())
-    all_labels.append(labels)
-
-TOKENS = torch.cat(all_tokens)
-MASKS  = torch.cat(all_masks)
-LABELS = torch.cat(all_labels)
-
-#Save
-torch.save({
-    "tokens": TOKENS,
-    "mask": MASKS,
-    "labels": LABELS
-}, "tokenized_dataset.pt")
-
-#Token dataset
-class TokenDataset(torch.utils.data.Dataset):
-    def __init__(self, tokens, mask, labels):
-        self.tokens = tokens
-        self.mask = mask
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.tokens)
-
-    def __getitem__(self, i):
-        return self.tokens[i], self.mask[i], self.labels[i]
-
-#################################################
-#### STEP 3: TRAIN A TRANSFORMER CLASSIFIER  ####
-#################################################
-
-#Model definition
-class JetTransformer(nn.Module):
-    def __init__(self, num_tokens, d_model=128, nhead=4, num_layers=4, num_classes=5):
-        super().__init__()
-
-        self.embedding = nn.Embedding(num_tokens, d_model)
-
-        self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=d_model,
-                nhead=nhead,
-                dim_feedforward=4*d_model,
-                batch_first=True
-            ),
-            num_layers=num_layers
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(d_model, d_model),
-            nn.GELU(),
-            nn.Linear(d_model, num_classes)
-        )
-
-    def forward(self, tokens, mask):
-        # tokens: [B, N]
-        x = self.embedding(tokens)   # [B, N, d_model]
-
-        # attention mask (True = ignore)
-        attn_mask = ~mask.bool()
-
-        x = self.transformer(x, src_key_padding_mask=attn_mask)
-
-        # masked mean pooling
-        x = (x * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
-
-        logits = self.classifier(x)
-        return logits
-
-#Traning loop
-dataset = TokenDataset(TOKENS, MASKS, LABELS)
-
-train_loader = torch.utils.data.DataLoader(dataset, batch_size=256, shuffle=True)
-
-tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
-
-optimizer = torch.optim.AdamW(tf_model.parameters(), lr=3e-4)
-criterion = nn.CrossEntropyLoss()
-
-print("Run transformer classifier training.")
-for epoch in range(m_epochs):
-    tf_model.train()
-
-    for tokens, mask, labels in train_loader:
-        tokens = tokens.cuda()
+    ##################################################
+    #### STEP 2: CONVERT JETS TO TOKEN SEQUENCES  ####
+    ##################################################
+    
+    #Tokenization function
+    def tokenize_batch(model, x, mask):
+        with torch.no_grad():
+            z = model.encoder(x)
+            z_real = z[mask.bool()]
+            _, tokens, _ = model.vq(z_real)
+    
+            # rebuild padded token tensor
+            token_tensor = torch.zeros_like(mask, dtype=torch.long)
+            token_tensor[mask.bool()] = tokens
+    
+        return token_tensor
+    
+    #Build token dataset (offline step)
+    print("Build token dataset.")
+    all_tokens = []
+    all_masks = []
+    all_labels = []
+    
+    model.eval()
+    
+    for x, mask, labels in loader:
+        x = x.cuda()
         mask = mask.cuda()
-        labels = labels.cuda()
-
-        optimizer.zero_grad()
-
-        logits = tf_model(tokens, mask)
-        loss = criterion(logits, labels)
-
-        loss.backward()
-        optimizer.step()
-#    print(torch.cuda.memory_allocated() / 1024**3)
-
-    print(f"Epoch {epoch}: loss = {loss.item():.4f}")
-
-torch.save(tf_model.state_dict(),"TransformerClassifier_model.pt")
+    
+        tokens = tokenize_batch(model, x, mask)
+    
+        all_tokens.append(tokens.cpu())
+        all_masks.append(mask.cpu())
+        all_labels.append(labels)
+    
+    TOKENS = torch.cat(all_tokens)
+    MASKS  = torch.cat(all_masks)
+    LABELS = torch.cat(all_labels)
+    
+    #Save
+    torch.save({
+        "tokens": TOKENS,
+        "mask": MASKS,
+        "labels": LABELS
+    }, input_data_dir+"tokenized_dataset.pt")
+    
+    #Token dataset
+    class TokenDataset(torch.utils.data.Dataset):
+        def __init__(self, tokens, mask, labels):
+            self.tokens = tokens
+            self.mask = mask
+            self.labels = labels
+    
+        def __len__(self):
+            return len(self.tokens)
+    
+        def __getitem__(self, i):
+            return self.tokens[i], self.mask[i], self.labels[i]
+    
+    #################################################
+    #### STEP 3: TRAIN A TRANSFORMER CLASSIFIER  ####
+    #################################################
+    
+    #Model definition
+    class JetTransformer(nn.Module):
+        def __init__(self, num_tokens, d_model=128, nhead=4, num_layers=4, num_classes=5):
+            super().__init__()
+    
+            self.embedding = nn.Embedding(num_tokens, d_model)
+    
+            self.transformer = nn.TransformerEncoder(
+                nn.TransformerEncoderLayer(
+                    d_model=d_model,
+                    nhead=nhead,
+                    dim_feedforward=4*d_model,
+                    batch_first=True
+                ),
+                num_layers=num_layers
+            )
+    
+            self.classifier = nn.Sequential(
+                nn.Linear(d_model, d_model),
+                nn.GELU(),
+                nn.Linear(d_model, num_classes)
+            )
+    
+        def forward(self, tokens, mask):
+            # tokens: [B, N]
+            x = self.embedding(tokens)   # [B, N, d_model]
+    
+            # attention mask (True = ignore)
+            attn_mask = ~mask.bool()
+    
+            x = self.transformer(x, src_key_padding_mask=attn_mask)
+    
+            # masked mean pooling
+            x = (x * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
+    
+            logits = self.classifier(x)
+            return logits
+    
+    #Traning loop
+    dataset = TokenDataset(TOKENS, MASKS, LABELS)
+    
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=256, shuffle=True)
+    
+    tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
+    
+    optimizer = torch.optim.AdamW(tf_model.parameters(), lr=3e-4)
+    criterion = nn.CrossEntropyLoss()
+    
+    print("Run transformer classifier training.")
+    for epoch in range(m_epochs):
+        tf_model.train()
+    
+        for tokens, mask, labels in train_loader:
+            tokens = tokens.cuda()
+            mask = mask.cuda()
+            labels = labels.cuda()
+    
+            optimizer.zero_grad()
+    
+            logits = tf_model(tokens, mask)
+            loss = criterion(logits, labels)
+    
+            loss.backward()
+            optimizer.step()
+    #    print(torch.cuda.memory_allocated() / 1024**3)
+    
+        print(f"Epoch {epoch}: loss = {loss.item():.4f}")
+    
+    torch.save(tf_model.state_dict(),"TransformerClassifier_model.pt")
