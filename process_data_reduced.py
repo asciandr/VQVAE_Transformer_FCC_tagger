@@ -33,6 +33,7 @@ print("njets:\t"+str(njets))
 print("torch zeros")
 X = torch.zeros((njets, N_MAX, 5), dtype=torch.float32)
 MASK = torch.zeros((njets, N_MAX), dtype=torch.float32)
+JET_PT = torch.tensor(arrays["jet_p"], dtype=torch.float32)
 LABELS = torch.tensor(arrays["recojet_isB"], dtype=torch.long)
 
 def wrap_phi(dphi):
@@ -85,6 +86,7 @@ torch.save(
     {
         "X": X,
         "mask": MASK,
+        "jet_pt": JET_PT,
         "labels": LABELS
     },
     #"valHcc_fcc_ee_jets_pf.pt"

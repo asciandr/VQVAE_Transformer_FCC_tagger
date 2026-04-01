@@ -25,19 +25,22 @@ val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_locatio
 X           = data["X"]        # [N, N_max, 5]
 MASK        = data["mask"] # [N, N_max]
 LABELS      = data["labels"]
+JET_PT      = data["jet_pt"]
 
 val_X       = val_data["X"]        # [N, N_max, 5]
 val_MASK    = val_data["mask"] # [N, N_max]
 val_LABELS  = val_data["labels"]
+val_JET_PT  = val_data["jet_pt"]
 
 print(X.device, MASK.device)
 
 from torch.utils.data import Dataset
 
 class TensorJetDataset(Dataset):
-    def __init__(self, X, mask, labels=None):
+    def __init__(self, X, mask, jet_pt, labels=None):
         self.X = X
         self.mask = mask
+        self.jet_pt = jet_pt
         self.labels = labels
 
     def __len__(self):
@@ -45,11 +48,11 @@ class TensorJetDataset(Dataset):
 
     def __getitem__(self, i):
         if self.labels is None:
-            return self.X[i], self.mask[i]
-        return self.X[i], self.mask[i], self.labels[i]
+            return self.X[i], self.mask[i], self.jet_pt[i]
+        return self.X[i], self.mask[i], self.jet_pt[i], self.labels[i]
 
-dataset = TensorJetDataset(X, MASK, LABELS)
-val_dataset = TensorJetDataset(val_X, val_MASK, val_LABELS)
+dataset = TensorJetDataset(X, MASK, JET_PT, LABELS)
+val_dataset = TensorJetDataset(val_X, val_MASK, val_JET_PT, val_LABELS)
 loader = torch.utils.data.DataLoader(
     dataset,
 #    batch_size=1,
@@ -172,7 +175,7 @@ opt = torch.optim.AdamW(model.parameters(), lr=2e-4)
 
 # check
 print("Running single-batch smoke test.")
-x, mask, labels = next(iter(loader))
+x, mask, jet_pt, labels = next(iter(loader))
 x = x.cuda()
 mask = mask.cuda()
 
@@ -185,7 +188,7 @@ print("Done with single-batch smoke test.")
 # check
 
 for epoch in range(n_epochs):
-    for x, mask, labels in loader:
+    for x, mask, jet_pt, labels in loader:
         x = x.cuda(non_blocking=True)
         mask = mask.cuda(non_blocking=True)
 
@@ -209,7 +212,7 @@ all_features = []
 all_jet_pt = []
 
 with torch.no_grad():
-    for x, mask, labels in val_loader:
+    for x, mask, jet_pt, labels in val_loader:
         x = x.cuda()
         mask = mask.cuda()
     
@@ -220,11 +223,12 @@ with torch.no_grad():
     
         all_tokens.append(tokens.cpu())
         all_features.append(x[mask.bool()].cpu())
-#        all_jet_pt.append(jet_pt.repeat_interleave(mask.sum(dim=1)).cpu())
+        ncounts = (mask.sum(dim=1).long()).cpu()
+        all_jet_pt.append(jet_pt.repeat_interleave(ncounts).cpu())
 
 tokens = torch.cat(all_tokens)       # [N_pf_total]
 features = torch.cat(all_features)   # [N_pf_total, F]
-#jet_pt_pf = torch.cat(all_jet_pt)    # [N_pf_total]
+jet_pt_pf = torch.cat(all_jet_pt)    # [N_pf_total]
 
 import matplotlib.pyplot as plt
 
@@ -280,26 +284,24 @@ plt.ylabel("Mean log10(p/p_jet)")
 plt.title("Token momentum scale")
 plt.savefig('token_momentum_scale.png')
 
-# Missing jet_p in data loader
-# as of now
-##print("Now token frequency per jet energy bin.")
-##freq_per_bin = {}
-##bins = torch.tensor([0, 5, 10, 15, 20])  # GeV
-##bin_ids = torch.bucketize(jet_pt_pf, bins)
-##
-##for b in bin_ids.unique():
-##    sel = bin_ids == b
-##    counts = torch.bincount(tokens[sel], minlength=K).float()
-##    freq_per_bin[int(b)] = counts / counts.sum()
-##
-##plt.figure(figsize=(6,4))
-##for b, freq in freq_per_bin.items():
-##    plt.plot(freq.numpy(), label=f"bin {b}")
-##plt.xlabel("Token ID")
-##plt.ylabel("Frequency")
-##plt.legend()
-##plt.title("Token stability vs jet pT")
-##plt.savefig('token_stability_jet_p.png')
+print("Now token frequency per jet energy bin.")
+freq_per_bin = {}
+bins = torch.tensor([0, 5, 10, 15, 20, 30, 40, 50])  # GeV
+bin_ids = torch.bucketize(jet_pt_pf, bins)
+
+for b in bin_ids.unique():
+    sel = bin_ids == b
+    counts = torch.bincount(tokens[sel], minlength=K).float()
+    freq_per_bin[int(b)] = counts / counts.sum()
+
+plt.figure(figsize=(6,4))
+for b, freq in freq_per_bin.items():
+    plt.plot(freq.numpy(), label=f"bin {b}")
+plt.xlabel("Token ID")
+plt.ylabel("Frequency")
+plt.legend()
+plt.title("Token stability vs jet pT")
+plt.savefig('token_stability_jet_p.png')
 
 ### Make post-VQ-VAE part
 ### of trainings optional
@@ -330,7 +332,7 @@ if train_transformer:
     
     model.eval()
     
-    for x, mask, labels in loader:
+    for x, mask, jet_pt, labels in loader:
         x = x.cuda()
         mask = mask.cuda()
     
