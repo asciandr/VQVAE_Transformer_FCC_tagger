@@ -18,9 +18,11 @@ print("Loading the dataset.")
 import torch
 torch.multiprocessing.set_sharing_strategy('file_system')
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
-data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="cpu")
+data = torch.load(input_data_dir+"fcc_ee_7classes_16Mjets_pf.pt", map_location="cpu")
+#data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="cpu")
 
-val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_location="cpu")
+val_data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
+#val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_location="cpu")
 
 X           = data["X"]        # [N, N_max, 5]
 MASK        = data["mask"] # [N, N_max]
@@ -300,7 +302,7 @@ for b, freq in freq_per_bin.items():
 plt.xlabel("Token ID")
 plt.ylabel("Frequency")
 plt.legend()
-plt.title("Token stability vs jet pT")
+plt.title("Token stability vs jet momentum")
 plt.savefig('token_stability_jet_p.png')
 
 ### Make post-VQ-VAE part
