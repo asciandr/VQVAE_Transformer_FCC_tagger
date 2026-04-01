@@ -5,7 +5,7 @@ Jets are represented as sets of particle-flow constituents and encoded using a l
 # bash commands
 ```
 source /cvmfs/sw.hsf.org/key4hep/releases/2023-06-05-fcchh/x86_64-centos7-gcc12.2.0-opt/key4hep-stack/*/setup.sh
-ulimit -n 2048
+ulimit -s unlimited
 python3 process_data.py
 singularity shell -B /gpfs01/ --nv /usatlas/u/asciandra/colorsinglet.sif
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128

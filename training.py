@@ -4,6 +4,7 @@
 n_classes=2
 # training of unsupervised VQ-VAE tokenizer
 #n_epochs=1
+#n_epochs=5
 n_epochs=20
 # training of Transformer-based classifier
 train_transformer=False
@@ -20,6 +21,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
 data = torch.load(input_data_dir+"fcc_ee_7classes_16Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="cpu")
+#data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 
 val_data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 #val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_location="cpu")
@@ -304,6 +306,11 @@ plt.ylabel("Frequency")
 plt.legend()
 plt.title("Token stability vs jet momentum")
 plt.savefig('token_stability_jet_p.png')
+
+# Token entropy - entropy ~ log(K) -> full usage, entropy <<  log(K) -> collapse
+entropy = -(freq * torch.log(freq + 1e-8)).sum()
+print("Token entropy:", entropy.item())
+print("Max entropy:", torch.log(torch.tensor(K)).item())
 
 ### Make post-VQ-VAE part
 ### of trainings optional
