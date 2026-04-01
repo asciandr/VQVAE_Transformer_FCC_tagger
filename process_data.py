@@ -5,7 +5,8 @@ from tqdm import trange
 
 N_MAX = 64
 
-file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hbb_Hcc.root")
+file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
+#file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hbb_Hcc.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hcc.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hbb.root")
 tree = file["tree"]
@@ -16,9 +17,14 @@ arrays = tree.arrays(
         "jet_p", "jet_theta", "jet_phi",
         "pfcand_p", "pfcand_theta", "pfcand_phi",
         "pfcand_charge", "pfcand_erel_log",
-        # for later classification
-        "recojet_isB"#,
-        #"recojet_isC"
+        # NB need 7 classes
+        "recojet_isB",
+        "recojet_isC",
+        "recojet_isS",
+        "recojet_isD",
+        "recojet_isU",
+        "recojet_isG",
+        "recojet_isTAU"
     ],
     library="np"
 )
@@ -33,7 +39,27 @@ print("torch zeros")
 X = torch.zeros((njets, N_MAX, 5), dtype=torch.float32)
 MASK = torch.zeros((njets, N_MAX), dtype=torch.float32)
 JET_PT = torch.tensor(arrays["jet_p"], dtype=torch.float32)
-LABELS = torch.tensor(arrays["recojet_isB"], dtype=torch.long)
+# class labels
+# fix a consistent mapping
+class_branches = [
+    "recojet_isTAU",
+    "recojet_isG",
+    "recojet_isU",
+    "recojet_isD",
+    "recojet_isS",
+    "recojet_isC",
+    "recojet_isB",
+]
+# stack into array -> shape = [N_jets, N_classes]
+labels_np = np.stack([arrays[b] for b in class_branches], axis=1)
+# sanity check: do jets have multiple or no label true?
+assert np.all(labels_np.sum(axis=1) == 1)
+# convert to class index -> labels_idx.shape = [N_jets], values {0, ..., N_classes-1}
+labels_idx = np.argmax(labels_np, axis=1)
+# check class balance
+print(np.bincount(labels_idx))
+# convert to torch
+LABELS = torch.tensor(labels_idx, dtype=torch.long)
 
 def wrap_phi(dphi):
     return (dphi + np.pi) % (2*np.pi) - np.pi
@@ -90,6 +116,7 @@ torch.save(
     },
     #"valHcc_fcc_ee_jets_pf.pt"
     #"fcc_ee_jets_pf.pt"
-    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt"
+    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_16Mjets_pf.pt"
+#    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt"
 )
 
