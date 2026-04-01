@@ -5,7 +5,8 @@ from tqdm import trange
 
 N_MAX = 64
 
-file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
+file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced200kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
+#file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hbb_Hcc.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hcc.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hbb.root")
@@ -17,6 +18,14 @@ arrays = tree.arrays(
         "jet_p", "jet_theta", "jet_phi",
         "pfcand_p", "pfcand_theta", "pfcand_phi",
         "pfcand_charge", "pfcand_erel_log",
+        "pfcand_thetarel", "pfcand_phirel",
+        "pfcand_dptdpt",
+        "pfcand_detadeta",
+        "pfcand_dphidphi",
+        "pfcand_dxydxy",
+        "pfcand_dzdz",
+        "pfcand_dxydz",
+        "pfcand_dphidxy",
         # NB need 7 classes
         "recojet_isB",
         "recojet_isC",
@@ -74,15 +83,20 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     phi  = arrays["pfcand_phi"][i]
     q    = arrays["pfcand_charge"][i]
     ecal = arrays["pfcand_erel_log"][i]
+    pfcand_dptdpt   = arrays["pfcand_dptdpt"][i]
+    pfcand_thetarel	= arrays["pfcand_thetarel"][i]
+    pfcand_phirel	= arrays["pfcand_phirel"][i]
+    pfcand_erel_log	= arrays["pfcand_erel_log"][i]
 
-    # sort by pT
-    order = np.argsort(pt)[::-1]
-    pt, eta, phi, q, ecal = (
-        pt[order], eta[order], phi[order],
-        q[order], ecal[order]
-    )
+    # sort by p
+    # NB do not sort, as baseline graph transformer does not do it
+    #order = np.argsort(pt)[::-1]
+    #pt, eta, phi, q, ecal = (
+    #    pt[order], eta[order], phi[order],
+    #    q[order], ecal[order]
+    #)
 
-    n = min(len(pt), N_max)
+    n = min(len(pfcand_dptdpt), N_max)
 
     x = np.zeros((N_max, 5), dtype=np.float32)
     mask = np.zeros(N_max, dtype=np.float32)
@@ -90,11 +104,11 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     if n == 0:
         return x, mask
 
-    x[:n, 0] = np.log10(pt[:n] / jet_pt + eps)
-    x[:n, 1] = eta[:n] - jet_eta
-    x[:n, 2] = wrap_phi(phi[:n] - jet_phi)
+    x[:n, 0] = pfcand_dptdpt[:n]#np.log10(pt[:n] / jet_pt + eps)
+    x[:n, 1] = pfcand_thetarel[:n]#eta[:n] - jet_eta
+    x[:n, 2] = pfcand_phirel[:n]#wrap_phi(phi[:n] - jet_phi)
     x[:n, 3] = q[:n]
-    x[:n, 4] = ecal[:n]
+    x[:n, 4] = pfcand_erel_log[:n]#ecal[:n]
 
     mask[:n] = 1.0
     return x, mask
@@ -116,7 +130,8 @@ torch.save(
     },
     #"valHcc_fcc_ee_jets_pf.pt"
     #"fcc_ee_jets_pf.pt"
-    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_16Mjets_pf.pt"
+    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_1_4Mjets_pf.pt"
+    #"/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_16Mjets_pf.pt"
 #    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt"
 )
 
