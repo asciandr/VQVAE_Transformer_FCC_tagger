@@ -19,7 +19,8 @@ print("Loading the dataset.")
 import torch
 torch.multiprocessing.set_sharing_strategy('file_system')
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
-data = torch.load(input_data_dir+"fcc_ee_7classes_16Mjets_pf.pt", map_location="cpu")
+data = torch.load(input_data_dir+"fcc_ee_7classes_1_4Mjets_pf.pt", map_location="cpu")
+#data = torch.load(input_data_dir+"fcc_ee_7classes_16Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 
