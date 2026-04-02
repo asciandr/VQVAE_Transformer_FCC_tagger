@@ -9,6 +9,8 @@ n_epochs=20
 # training of Transformer-based classifier
 train_transformer=False
 m_epochs=20
+# number of PF features
+N_FEAT=10
 
 ###########################################
 #### STEP 1: TRAIN TOKENIZER JetVQVAE) ####
@@ -19,20 +21,22 @@ print("Loading the dataset.")
 import torch
 torch.multiprocessing.set_sharing_strategy('file_system')
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
-data = torch.load(input_data_dir+"fcc_ee_7classes_1_4Mjets_pf.pt", map_location="cpu")
+data = torch.load(input_data_dir+"fcc_ee_7classes_10features_1_4Mjets_pf.pt", map_location="cpu")
+#data = torch.load(input_data_dir+"fcc_ee_7classes_1_4Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_16Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 
-val_data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
+val_data = torch.load(input_data_dir+"fcc_ee_7classes_10features_70kjets_pf.pt", map_location="cpu")
+#val_data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 #val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_location="cpu")
 
-X           = data["X"]        # [N, N_max, 5]
+X           = data["X"]        # [N, N_max, N_FEAT]
 MASK        = data["mask"] # [N, N_max]
 LABELS      = data["labels"]
 JET_PT      = data["jet_pt"]
 
-val_X       = val_data["X"]        # [N, N_max, 5]
+val_X       = val_data["X"]        # [N, N_max, N_FEAT]
 val_MASK    = val_data["mask"] # [N, N_max]
 val_LABELS  = val_data["labels"]
 val_JET_PT  = val_data["jet_pt"]
@@ -139,7 +143,8 @@ class VectorQuantizerEMA(nn.Module):
 class JetVQVAE(nn.Module):
     #def __init__(self, F=5, D=32, K=256):
     #def __init__(self, F=5, D=32, K=64):
-    def __init__(self, F=5, D=16, K=16):
+    #def __init__(self, F=5, D=16, K=16):
+    def __init__(self, F=N_FEAT, D=16, K=32):
         super().__init__()
 
         self.encoder = nn.Sequential(
@@ -285,7 +290,7 @@ plt.savefig('token_freq.png')
 
 print("Now token <-> charge.")
 
-charge = features[:, 3]
+charge = features[:, 9]
 
 token_charge = []
 for k in range(K):

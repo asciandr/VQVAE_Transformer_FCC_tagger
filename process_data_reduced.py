@@ -3,7 +3,12 @@ import uproot
 import numpy as np
 from tqdm import trange
 
-N_MAX = 64
+# max n. of PF candidates per jet
+N_MAX = 75
+# n. of PF features
+N_FEAT = 10
+
+
 
 file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced10kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced10kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_Hcc.root")
@@ -45,7 +50,7 @@ njets = len(arrays["jet_p"])
 print("njets:\t"+str(njets))
 
 print("torch zeros")
-X = torch.zeros((njets, N_MAX, 5), dtype=torch.float32)
+X = torch.zeros((njets, N_MAX, N_FEAT), dtype=torch.float32)
 MASK = torch.zeros((njets, N_MAX), dtype=torch.float32)
 JET_PT = torch.tensor(arrays["jet_p"], dtype=torch.float32)
 # class labels
@@ -81,12 +86,19 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     pt   = arrays["pfcand_p"][i]
     eta  = arrays["pfcand_theta"][i]
     phi  = arrays["pfcand_phi"][i]
-    q    = arrays["pfcand_charge"][i]
-    ecal = arrays["pfcand_erel_log"][i]
-    pfcand_dptdpt   = arrays["pfcand_dptdpt"][i]
+    #ecal = arrays["pfcand_erel_log"][i]
+
+    pfcand_erel_log	= arrays["pfcand_erel_log"][i]
     pfcand_thetarel	= arrays["pfcand_thetarel"][i]
     pfcand_phirel	= arrays["pfcand_phirel"][i]
-    pfcand_erel_log	= arrays["pfcand_erel_log"][i]
+    pfcand_dptdpt   = arrays["pfcand_dptdpt"][i]
+    pfcand_detadeta	= arrays["pfcand_detadeta"][i]
+    pfcand_dphidphi	= arrays["pfcand_dphidphi"][i]
+    pfcand_dxydxy	= arrays["pfcand_dxydxy"][i]
+    pfcand_dzdz	    = arrays["pfcand_dzdz"][i]
+    pfcand_dxydz	= arrays["pfcand_dxydz"][i]
+
+    pfcand_charge   = arrays["pfcand_charge"][i]
 
     # sort by p
     # NB do not sort, as baseline graph transformer does not do it
@@ -98,17 +110,23 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
 
     n = min(len(pfcand_dptdpt), N_max)
 
-    x = np.zeros((N_max, 5), dtype=np.float32)
+    x = np.zeros((N_max, N_FEAT), dtype=np.float32)
     mask = np.zeros(N_max, dtype=np.float32)
 
     if n == 0:
         return x, mask
 
-    x[:n, 0] = pfcand_dptdpt[:n]#np.log10(pt[:n] / jet_pt + eps)
-    x[:n, 1] = pfcand_thetarel[:n]#eta[:n] - jet_eta
-    x[:n, 2] = pfcand_phirel[:n]#wrap_phi(phi[:n] - jet_phi)
-    x[:n, 3] = q[:n]
-    x[:n, 4] = pfcand_erel_log[:n]#ecal[:n]
+    x[:n, 0] = pfcand_erel_log[:n]
+    x[:n, 1] = pfcand_thetarel[:n]
+    x[:n, 2] = pfcand_phirel[:n]
+    x[:n, 3] = pfcand_dptdpt[:n]
+    x[:n, 4] = pfcand_detadeta[:n]
+    x[:n, 5] = pfcand_dphidphi[:n]
+    x[:n, 6] = pfcand_dxydxy[:n]
+    x[:n, 7] = pfcand_dzdz[:n]
+    x[:n, 8] = pfcand_dxydz[:n]
+
+    x[:n, 9] = pfcand_charge[:n]
 
     mask[:n] = 1.0
     return x, mask
@@ -130,7 +148,7 @@ torch.save(
     },
     #"valHcc_fcc_ee_jets_pf.pt"
     #"fcc_ee_jets_pf.pt"
-    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_70kjets_pf.pt"
+    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_10features_70kjets_pf.pt"
 #    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_20kjets_pf.pt"
 )
 
