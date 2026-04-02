@@ -6,7 +6,7 @@ from tqdm import trange
 # max n. of PF candidates per jet
 N_MAX = 75
 # n. of PF features
-N_FEAT = 10
+N_FEAT = 15
 
 file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced200kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
@@ -29,6 +29,10 @@ arrays = tree.arrays(
         "pfcand_dzdz",
         "pfcand_dxydz",
         "pfcand_dphidxy",
+        "pfcand_dlambdadz",
+        "pfcand_dxyc",
+        "pfcand_dxyctgtheta",
+        "pfcand_phic",
         # NB need 7 classes
         "recojet_isB",
         "recojet_isC",
@@ -95,8 +99,13 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     pfcand_dxydxy	= arrays["pfcand_dxydxy"][i]
     pfcand_dzdz	    = arrays["pfcand_dzdz"][i]
     pfcand_dxydz	= arrays["pfcand_dxydz"][i]
-
     pfcand_charge   = arrays["pfcand_charge"][i]
+    pfcand_dphidxy	= arrays["pfcand_dphidxy"][i]
+    pfcand_dlambdadz= arrays["pfcand_dlambdadz"][i]
+    pfcand_dxyc	    = arrays["pfcand_dxyc"][i]
+    pfcand_dxyctgtheta	= arrays["pfcand_dxyctgtheta"][i]
+    pfcand_phic	    = arrays["pfcand_phic"][i]
+
 
     # sort by p
     # NB do not sort, as baseline graph transformer does not do it
@@ -123,8 +132,12 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     x[:n, 6] = pfcand_dxydxy[:n]
     x[:n, 7] = pfcand_dzdz[:n]
     x[:n, 8] = pfcand_dxydz[:n]
-
     x[:n, 9] = pfcand_charge[:n]
+    x[:n, 10] = pfcand_dphidxy[:n]
+    x[:n, 11] = pfcand_dlambdadz[:n]
+    x[:n, 12] = pfcand_dxyc[:n]
+    x[:n, 13] = pfcand_dxyctgtheta[:n]
+    x[:n, 14] = pfcand_phic[:n]
 
     mask[:n] = 1.0
     return x, mask
@@ -146,7 +159,7 @@ torch.save(
     },
     #"valHcc_fcc_ee_jets_pf.pt"
     #"fcc_ee_jets_pf.pt"
-    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_10features_1_4Mjets_pf.pt"
+    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_15features_1_4Mjets_pf.pt"
     #"/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_16Mjets_pf.pt"
 #    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt"
 )
