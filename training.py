@@ -84,7 +84,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VectorQuantizerEMA(nn.Module):
-    def __init__(self, K, D, beta=0.25, decay=0.99, eps=1e-5):
+    def __init__(self, K, D, beta=0.5, decay=0.95, eps=1e-5):
         super().__init__()
         self.K = K
         self.D = D
@@ -176,7 +176,7 @@ print("Defining model.")
 model = JetVQVAE().cuda()
 for name, buf in model.named_buffers():
     print(name, buf.device, buf.numel())
-opt = torch.optim.AdamW(model.parameters(), lr=2e-4)
+opt = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
 # check
 print("Running single-batch smoke test.")
@@ -192,7 +192,17 @@ print(torch.cuda.max_memory_allocated() / 1024**2, "MB")
 print("Done with single-batch smoke test.")
 # check
 
+# best validation loss (may add entropy in the future?)
+# to define "best" model
+best_val_loss = float("inf")
+
+print("Starting VQ-VAE training loop.")
 for epoch in range(n_epochs):
+
+    # ---- TRAINING ----
+    model.train()
+    train_loss = 0.0
+
     for x, mask, jet_pt, labels in loader:
         x = x.cuda(non_blocking=True)
         mask = mask.cuda(non_blocking=True)
@@ -201,15 +211,38 @@ for epoch in range(n_epochs):
         _, tokens, loss = model(x, mask)
         loss.backward()
         opt.step()
-#        print(torch.cuda.memory_allocated() / 1024**3)
-    print(f"Epoch {epoch}: loss = {loss.item():.4f}")
+
+        train_loss += loss.item()
+
+    train_loss /= len(loader)
+
+    # ---- VALIDATION ----
+    model.eval()
+    val_loss = 0.0
+
+    with torch.no_grad():
+        for x, mask, jet_pt, labels in val_loader:
+            x = x.cuda(non_blocking=True)
+            mask = mask.cuda(non_blocking=True)
+
+            _, tokens, loss = model(x, mask)
+            val_loss += loss.item()
+
+    val_loss /= len(val_loader)
+    # Save best epoch
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        torch.save(model.state_dict(), "JetVQVAE_best.pt")
+        print("  → Saved new best model")
+
+    print(f"Epoch {epoch}: train = {train_loss:.4f}, val = {val_loss:.4f}")
 
 # evaluation and sanity checks
 print("Evaluate and check distributions.")
 model.eval()
 
-print("Save model.")
-torch.save(model.state_dict(),"JetVQVAE_model.pt")
+print("Save last model.")
+torch.save(model.state_dict(), "JetVQVAE_last.pt")
 
 print("Now token frequency.")
 all_tokens = []
