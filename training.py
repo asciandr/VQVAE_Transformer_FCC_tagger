@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 
 ### job handles ###
-n_classes=2
+n_classes=7
 # training of unsupervised VQ-VAE tokenizer
 #n_epochs=1
-#n_epochs=5
-n_epochs=10
+n_epochs=5
+#n_epochs=10
 # training of Transformer-based classifier
-train_transformer=False
+train_transformer=True#False
 m_epochs=20
 # number of PF features
 N_FEAT=35
@@ -226,7 +226,7 @@ model = JetVQVAE().cuda()
 #for name, buf in model.named_buffers():
 #    print(name, buf.device, buf.numel())
 # debugging
-opt = torch.optim.AdamW(model.parameters(), lr=1e-4)
+opt = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
 # check
 print("==> Running single-batch smoke test.")
