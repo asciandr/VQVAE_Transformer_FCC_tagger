@@ -6,9 +6,10 @@ from tqdm import trange
 # max n. of PF candidates per jet
 N_MAX = 75
 # n. of PF features
-N_FEAT = 15
+N_FEAT = 35
 
-file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced200kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
+file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced100kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
+#file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/reduced200kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hbb_Hcc.root")
 #file = uproot.open("/atlasgpfs01/usatlas/workarea/asciandra/training/FSR_studies_IDEA_7labels_out_Hcc.root")
@@ -33,6 +34,26 @@ arrays = tree.arrays(
         "pfcand_dxyc",
         "pfcand_dxyctgtheta",
         "pfcand_phic",
+        "pfcand_phidz",
+        "pfcand_phictgtheta",
+        "pfcand_cdz",
+        "pfcand_cctgtheta",
+        "pfcand_mtof",
+        "pfcand_dndx",
+        "pfcand_isMu",
+        "pfcand_isEl",
+        "pfcand_isChargedHad",
+        "pfcand_isGamma",
+        "pfcand_isNeutralHad",
+        "pfcand_dxy",
+        "pfcand_dz",
+        "pfcand_btagSip2dVal",
+        "pfcand_btagSip2dSig",
+        "pfcand_btagSip3dVal",
+        "pfcand_btagSip3dSig",
+        "pfcand_btagJetDistVal",
+        "pfcand_btagJetDistSig",
+        "pfcand_type",
         # NB need 7 classes
         "recojet_isB",
         "recojet_isC",
@@ -105,6 +126,28 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     pfcand_dxyc	    = arrays["pfcand_dxyc"][i]
     pfcand_dxyctgtheta	= arrays["pfcand_dxyctgtheta"][i]
     pfcand_phic	    = arrays["pfcand_phic"][i]
+    pfcand_phidz	= arrays["pfcand_phidz"][i]
+    pfcand_phictgtheta	= arrays["pfcand_phictgtheta"][i]
+    pfcand_cdz	= arrays["pfcand_cdz"][i]
+    pfcand_cctgtheta	= arrays["pfcand_cctgtheta"][i]
+    pfcand_mtof	= arrays["pfcand_mtof"][i]
+    pfcand_dndx	= arrays["pfcand_dndx"][i]
+    pfcand_isMu	= arrays["pfcand_isMu"][i]
+    pfcand_isEl	= arrays["pfcand_isEl"][i]
+    pfcand_isChargedHad	= arrays["pfcand_isChargedHad"][i]
+    pfcand_isGamma	= arrays["pfcand_isGamma"][i]
+    pfcand_isNeutralHad	= arrays["pfcand_isNeutralHad"][i]
+    pfcand_dxy	= arrays["pfcand_dxy"][i]
+    pfcand_dz	= arrays["pfcand_dz"][i]
+    pfcand_btagSip2dVal	= arrays["pfcand_btagSip2dVal"][i]
+    pfcand_btagSip2dSig	= arrays["pfcand_btagSip2dSig"][i]
+    pfcand_btagSip3dVal	= arrays["pfcand_btagSip3dVal"][i]
+    pfcand_btagSip3dSig	= arrays["pfcand_btagSip3dSig"][i]
+    pfcand_btagJetDistVal	= arrays["pfcand_btagJetDistVal"][i]
+    pfcand_btagJetDistSig	= arrays["pfcand_btagJetDistSig"][i]
+    pfcand_type	= arrays["pfcand_type"][i]
+
+
 
 
     # sort by p
@@ -138,6 +181,26 @@ def jet_to_tensor(arrays, i, N_max=64, eps=1e-10):
     x[:n, 12] = pfcand_dxyc[:n]
     x[:n, 13] = pfcand_dxyctgtheta[:n]
     x[:n, 14] = pfcand_phic[:n]
+    x[:n, 15] = pfcand_phidz[:n]
+    x[:n, 16] = pfcand_phictgtheta[:n]
+    x[:n, 17] = pfcand_cdz[:n]
+    x[:n, 18] = pfcand_cctgtheta[:n]
+    x[:n, 19] = pfcand_mtof[:n]
+    x[:n, 20] = pfcand_dndx[:n]
+    x[:n, 21] = pfcand_isMu[:n]
+    x[:n, 22] = pfcand_isEl[:n]
+    x[:n, 23] = pfcand_isChargedHad[:n]
+    x[:n, 24] = pfcand_isGamma[:n]
+    x[:n, 25] = pfcand_isNeutralHad[:n]
+    x[:n, 26] = pfcand_dxy[:n]
+    x[:n, 27] = pfcand_dz[:n]
+    x[:n, 28] = pfcand_btagSip2dVal[:n]
+    x[:n, 29] = pfcand_btagSip2dSig[:n]
+    x[:n, 30] = pfcand_btagSip3dVal[:n]
+    x[:n, 31] = pfcand_btagSip3dSig[:n]
+    x[:n, 32] = pfcand_btagJetDistVal[:n]
+    x[:n, 33] = pfcand_btagJetDistSig[:n]
+    x[:n, 34] = pfcand_type[:n]
 
     mask[:n] = 1.0
     return x, mask
@@ -159,7 +222,8 @@ torch.save(
     },
     #"valHcc_fcc_ee_jets_pf.pt"
     #"fcc_ee_jets_pf.pt"
-    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_15features_1_4Mjets_pf.pt"
+    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_35features_700kjets_pf.pt"
+    #"/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_35features_1_4Mjets_pf.pt"
     #"/gpfs01/usfcc/asciandra/tokenization/fcc_ee_7classes_16Mjets_pf.pt"
 #    "/gpfs01/usfcc/asciandra/tokenization/fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt"
 )

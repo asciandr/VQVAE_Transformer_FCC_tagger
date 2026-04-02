@@ -10,7 +10,7 @@ n_epochs=10
 train_transformer=False
 m_epochs=20
 # number of PF features
-N_FEAT=15
+N_FEAT=35
 
 ###########################################
 #### STEP 1: TRAIN TOKENIZER JetVQVAE) ####
@@ -21,14 +21,16 @@ print("==> Loading the dataset.")
 import torch
 torch.multiprocessing.set_sharing_strategy('file_system')
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
-data = torch.load(input_data_dir+"fcc_ee_7classes_15features_1_4Mjets_pf.pt", map_location="cpu")
+data = torch.load(input_data_dir+"fcc_ee_7classes_35features_700kjets_pf.pt", map_location="cpu")
+#data = torch.load(input_data_dir+"fcc_ee_7classes_15features_1_4Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_10features_1_4Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_1_4Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_16Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_4_6Mjets_pf.pt", map_location="cpu")
 #data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 
-val_data = torch.load(input_data_dir+"fcc_ee_7classes_15features_70kjets_pf.pt", map_location="cpu")
+val_data = torch.load(input_data_dir+"fcc_ee_7classes_35features_70kjets_pf.pt", map_location="cpu")
+#val_data = torch.load(input_data_dir+"fcc_ee_7classes_15features_70kjets_pf.pt", map_location="cpu")
 #val_data = torch.load(input_data_dir+"fcc_ee_7classes_10features_70kjets_pf.pt", map_location="cpu")
 #val_data = torch.load(input_data_dir+"fcc_ee_7classes_70kjets_pf.pt", map_location="cpu")
 #val_data = torch.load(input_data_dir+"fcc_ee_Hbb_Hcc_20kjets_pf.pt", map_location="cpu")
@@ -182,6 +184,7 @@ class JetVQVAE(nn.Module):
     #def __init__(self, D=32, K=256):
     #def __init__(self, D=32, K=64):
     #def __init__(self, D=16, K=16):
+    #def __init__(self, D=16, K=32):
     def __init__(self, D=16, K=32):
         super().__init__()
 
