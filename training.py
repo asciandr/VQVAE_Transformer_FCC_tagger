@@ -17,7 +17,7 @@ N_FEAT=10
 ###########################################
 
 #load data
-print("Loading the dataset.")
+print("==> Loading the dataset.")
 import torch
 torch.multiprocessing.set_sharing_strategy('file_system')
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
@@ -41,7 +41,43 @@ val_MASK    = val_data["mask"] # [N, N_max]
 val_LABELS  = val_data["labels"]
 val_JET_PT  = val_data["jet_pt"]
 
-print(X.device, MASK.device)
+print("==> Standardize input features.")
+print("\tBefore standardization.")
+print("\t\tX.mean():\t", X.mean())
+print("\t\tX.std():\t", X.std())
+print("\t\tX.abs().max():\t", X.abs().max())
+# standardization of input features
+# flatten only valid PFs
+X_flat  = X[MASK.bool()]
+mean    = X_flat.mean(dim=0)
+std     = X_flat.std(dim=0) + 1e-6
+# apply to train and validation features
+# FIXME: will need to store values for inference!
+X     = (X - mean) / std
+val_X = (val_X - mean) / std
+# THEN clip
+X     = torch.clamp(X, -5, 5)
+val_X = torch.clamp(val_X, -5, 5)
+# After normalization + clipping, 
+# zero out padding again 
+# padding contains non-zero junk
+# model sees fake PF candidates
+X[~MASK.bool()]         = 0.0
+val_X[~val_MASK.bool()] = 0.0
+# debugging
+print("\tAfter standardization.")
+print("\t\tX.mean():\t", X.mean())
+print("\t\tX.std():\t", X.std())
+print("\t\tX.abs().max():\t", X.abs().max())
+X_valid = X[MASK.bool()]
+print("\t\tmean (valid PFs):", X_valid.mean())
+print("\t\tstd  (valid PFs):", X_valid.std())
+# check max() of diff features
+#for i in range(N_FEAT):
+#    print(i, X[..., i].abs().max())
+# where are X and MASK sitting?
+#print(X.device, MASK.device)
+# debugging
 
 from torch.utils.data import Dataset
 
@@ -85,7 +121,7 @@ val_loader = torch.utils.data.DataLoader(
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as FNC
 
 class VectorQuantizerEMA(nn.Module):
     def __init__(self, K, D, beta=0.5, decay=0.95, eps=1e-5):
@@ -117,7 +153,7 @@ class VectorQuantizerEMA(nn.Module):
         # EMA updates (training only)
         if self.training:
             with torch.no_grad():
-                onehot = F.one_hot(indices, self.K).float()
+                onehot = FNC.one_hot(indices, self.K).float()
                 cluster_size = onehot.sum(dim=0)
 
                 self.ema_cluster_size.mul_(self.decay).add_(cluster_size, alpha=1 - self.decay)
@@ -135,20 +171,20 @@ class VectorQuantizerEMA(nn.Module):
                 self.codebook.data.copy_(self.ema_codebook / cluster_size.unsqueeze(1))
 
         # losses
-        commit_loss = self.beta * F.mse_loss(z_q.detach(), z)
+        commit_loss = self.beta * FNC.mse_loss(z_q.detach(), z)
         z_q = z + (z_q - z).detach()
 
         return z_q, indices.view(z.shape[:-1]), commit_loss
 
 class JetVQVAE(nn.Module):
-    #def __init__(self, F=5, D=32, K=256):
-    #def __init__(self, F=5, D=32, K=64):
-    #def __init__(self, F=5, D=16, K=16):
-    def __init__(self, F=N_FEAT, D=16, K=32):
+    #def __init__(self, D=32, K=256):
+    #def __init__(self, D=32, K=64):
+    #def __init__(self, D=16, K=16):
+    def __init__(self, D=16, K=16):
         super().__init__()
 
         self.encoder = nn.Sequential(
-            nn.Linear(F, 64),
+            nn.Linear(N_FEAT, 64),
             nn.GELU(),
             nn.Linear(64, 64),
             nn.GELU(),
@@ -163,28 +199,32 @@ class JetVQVAE(nn.Module):
             nn.GELU(),
             nn.Linear(64, 64),
             nn.GELU(),
-            nn.Linear(64, F),
+            nn.Linear(64, N_FEAT),
         )
 
     def forward(self, x, mask):
-        # x: [B, N, F], mask: [B, N]
+        # x: [B, N, N_FEAT], mask: [B, N]
         z = self.encoder(x)
         z_q, tokens, vq_loss = self.vq(z)
         x_rec = self.decoder(z_q)
 
         # masked reconstruction loss
-        rec_loss = ((x - x_rec)**2 * mask.unsqueeze(-1)).sum() / mask.sum()
+        num_valid = mask.sum() * N_FEAT
+        rec_loss = ((x_rec - x)**2 * mask.unsqueeze(-1)).sum() / num_valid
 
         return x_rec, tokens, rec_loss + vq_loss
 
-print("Defining model.")
+print("==> Defining model.")
 model = JetVQVAE().cuda()
-for name, buf in model.named_buffers():
-    print(name, buf.device, buf.numel())
+# debugging
+# VQ model EMA buffers must live on the same device as the model
+#for name, buf in model.named_buffers():
+#    print(name, buf.device, buf.numel())
+# debugging
 opt = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
 # check
-print("Running single-batch smoke test.")
+print("==> Running single-batch smoke test.")
 x, mask, jet_pt, labels = next(iter(loader))
 x = x.cuda()
 mask = mask.cuda()
@@ -193,15 +233,16 @@ torch.cuda.reset_peak_memory_stats()
 with torch.no_grad():
     _ = model(x, mask)
 
-print(torch.cuda.max_memory_allocated() / 1024**2, "MB")
-print("Done with single-batch smoke test.")
+print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
+print("\tDone with single-batch smoke test.")
 # check
 
 # best validation loss (may add entropy in the future?)
 # to define "best" model
 best_val_loss = float("inf")
+model_best_val_loss = model
 
-print("Starting VQ-VAE training loop.")
+print("==> Starting VQ-VAE training loop.")
 for epoch in range(n_epochs):
 
     # ---- TRAINING ----
@@ -218,8 +259,17 @@ for epoch in range(n_epochs):
         opt.step()
 
         train_loss += loss.item()
+        # debugging
+        #print(loss.shape)
+        if loss.item()>10:
+            print("WARNING: very large train loss:", loss.item())
+        #print("train mask sum:", mask.sum().item())
+        #print("train x mean:", x.abs().mean().item())
+        #print("train loss per element:", loss.item() / (mask.sum().item() * N_FEAT))
 
     train_loss /= len(loader)
+    if train_loss>10:
+        print("WARNING: very large AVERAGE LOSS:", train_loss)
 
     # ---- VALIDATION ----
     model.eval()
@@ -232,24 +282,30 @@ for epoch in range(n_epochs):
 
             _, tokens, loss = model(x, mask)
             val_loss += loss.item()
+            # debugging
+            #print("val loss:", loss.item())
+            #print("val mask sum:", mask.sum().item())
+            #print("val x mean:", x.abs().mean().item())
 
     val_loss /= len(val_loader)
     # Save best epoch
     if val_loss < best_val_loss:
         best_val_loss = val_loss
         torch.save(model.state_dict(), "JetVQVAE_best.pt")
+        model_best_val_loss = model
         print("  → Saved new best model")
 
-    print(f"Epoch {epoch}: train = {train_loss:.4f}, val = {val_loss:.4f}")
+    print(f"\tEpoch {epoch}: train = {train_loss:.4f}, val = {val_loss:.4f}")
 
-# evaluation and sanity checks
-print("Evaluate and check distributions.")
-model.eval()
-
-print("Save last model.")
+print("==> Save last model too.")
 torch.save(model.state_dict(), "JetVQVAE_last.pt")
 
-print("Now token frequency.")
+# evaluation and sanity checks
+print("==> Evaluate and check distributions.")
+# use best model for plots
+model_best_val_loss.eval()
+
+print("\tNow token frequency.")
 all_tokens = []
 all_features = []
 all_jet_pt = []
@@ -259,10 +315,10 @@ with torch.no_grad():
         x = x.cuda()
         mask = mask.cuda()
     
-        z = model.encoder(x)
+        z = model_best_val_loss.encoder(x)
         z_real = z[mask.bool()]
     
-        _, tokens, _ = model.vq(z_real)
+        _, tokens, _ = model_best_val_loss.vq(z_real)
     
         all_tokens.append(tokens.cpu())
         all_features.append(x[mask.bool()].cpu())
@@ -275,7 +331,7 @@ jet_pt_pf = torch.cat(all_jet_pt)    # [N_pf_total]
 
 import matplotlib.pyplot as plt
 
-K = model.vq.K
+K = model_best_val_loss.vq.K
 
 counts = torch.bincount(tokens, minlength=K).float()
 freq = counts / counts.sum()
@@ -288,7 +344,7 @@ plt.yscale("log")
 plt.title("Token usage histogram")
 plt.savefig('token_freq.png')
 
-print("Now token <-> charge.")
+print("\tNow token <-> charge.")
 
 charge = features[:, 9]
 
@@ -328,7 +384,7 @@ plt.savefig('token_charge.png')
 #plt.title("Token momentum scale")
 #plt.savefig('token_momentum_scale.png')
 
-print("Now token frequency per jet energy bin.")
+print("\tNow token frequency per jet energy bin.")
 freq_per_bin = {}
 bins = torch.tensor([0, 5, 10, 15, 20, 30, 40, 50])  # GeV
 bin_ids = torch.bucketize(jet_pt_pf, bins)
@@ -349,8 +405,8 @@ plt.savefig('token_stability_jet_p.png')
 
 # Token entropy - entropy ~ log(K) -> full usage, entropy <<  log(K) -> collapse
 entropy = -(freq * torch.log(freq + 1e-8)).sum()
-print("Token entropy:", entropy.item())
-print("Max entropy:", torch.log(torch.tensor(K)).item())
+print("==> Token entropy:", entropy.item())
+print("==> Max entropy:", torch.log(torch.tensor(K)).item())
 
 ### Make post-VQ-VAE part
 ### of trainings optional
@@ -374,11 +430,14 @@ if train_transformer:
         return token_tensor
     
     #Build token dataset (offline step)
-    print("Build token dataset.")
+    print("==> Build token dataset.")
     all_tokens = []
     all_masks = []
     all_labels = []
     
+    # at this point no need for "last" model,
+    # just use "best" model for transformer
+    model = model_best_val_loss
     model.eval()
     
     for x, mask, jet_pt, labels in loader:
@@ -467,7 +526,7 @@ if train_transformer:
     optimizer = torch.optim.AdamW(tf_model.parameters(), lr=3e-4)
     criterion = nn.CrossEntropyLoss()
     
-    print("Run transformer classifier training.")
+    print("==> Run transformer classifier training.")
     for epoch in range(m_epochs):
         tf_model.train()
     
@@ -485,6 +544,6 @@ if train_transformer:
             optimizer.step()
     #    print(torch.cuda.memory_allocated() / 1024**3)
     
-        print(f"Epoch {epoch}: loss = {loss.item():.4f}")
+        print(f"\tEpoch {epoch}: loss = {loss.item():.4f}")
     
     torch.save(tf_model.state_dict(),"TransformerClassifier_model.pt")
