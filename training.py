@@ -270,24 +270,25 @@ plt.ylabel("Mean charge")
 plt.title("Token charge")
 plt.savefig('token_charge.png')
 
-print("Now token <-> momentum scale.")
-logpt = features[:, 0]
-
-token_logpt = []
-for k in range(K):
-    sel = tokens == k
-    if sel.sum() > 0:
-        token_logpt.append(logpt[sel].mean().item())
-    else:
-        token_logpt.append(0.0)
-
-plt.figure(figsize=(6,4))
-plt.scatter(range(K), token_logpt)
-plt.axhline(0, color="gray", linestyle="--")
-plt.xlabel("Token ID")
-plt.ylabel("Mean log10(p/p_jet)")
-plt.title("Token momentum scale")
-plt.savefig('token_momentum_scale.png')
+# NB first feature is not momentum anymore!
+#print("Now token <-> momentum scale.")
+#logpt = features[:, 0]
+#
+#token_logpt = []
+#for k in range(K):
+#    sel = tokens == k
+#    if sel.sum() > 0:
+#        token_logpt.append(logpt[sel].mean().item())
+#    else:
+#        token_logpt.append(0.0)
+#
+#plt.figure(figsize=(6,4))
+#plt.scatter(range(K), token_logpt)
+#plt.axhline(0, color="gray", linestyle="--")
+#plt.xlabel("Token ID")
+#plt.ylabel("Mean log10(p/p_jet)")
+#plt.title("Token momentum scale")
+#plt.savefig('token_momentum_scale.png')
 
 print("Now token frequency per jet energy bin.")
 freq_per_bin = {}
