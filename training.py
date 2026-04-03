@@ -7,7 +7,10 @@ n_classes=7
 n_epochs=5
 #n_epochs=10
 # training of Transformer-based classifier
-train_transformer=True#False
+# FIXME Not freeing VQ-VAE memory
+# Dataset too large in RAM
+# => Run Transformer in a fresh process
+train_transformer=False
 m_epochs=20
 # number of PF features
 N_FEAT=35
@@ -185,7 +188,7 @@ class JetVQVAE(nn.Module):
     #def __init__(self, D=32, K=64):
     #def __init__(self, D=16, K=16):
     #def __init__(self, D=16, K=32):
-    def __init__(self, D=16, K=32):
+    def __init__(self, D=16, K=64):
         super().__init__()
 
         self.encoder = nn.Sequential(
@@ -401,7 +404,8 @@ for b in bin_ids.unique():
 
 plt.figure(figsize=(6,4))
 for b, freq in freq_per_bin.items():
-    plt.plot(freq.numpy(), label=f"bin {b}")
+    plt.plot(freq.numpy(), "o", label=f"bin {b}")
+
 plt.xlabel("Token ID")
 plt.ylabel("Frequency")
 plt.legend()
@@ -528,13 +532,15 @@ if train_transformer:
     
     tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
     
-    optimizer = torch.optim.AdamW(tf_model.parameters(), lr=3e-4)
+    optimizer = torch.optim.AdamW(tf_model.parameters(), lr=1e-4)
     criterion = nn.CrossEntropyLoss()
     
     print("==> Run transformer classifier training.")
     for epoch in range(m_epochs):
         tf_model.train()
     
+        print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
+        print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
         for tokens, mask, labels in train_loader:
             tokens = tokens.cuda()
             mask = mask.cuda()
@@ -547,7 +553,8 @@ if train_transformer:
     
             loss.backward()
             optimizer.step()
-    #    print(torch.cuda.memory_allocated() / 1024**3)
+        print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
+        print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
     
         print(f"\tEpoch {epoch}: loss = {loss.item():.4f}")
     
