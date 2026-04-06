@@ -417,72 +417,73 @@ entropy = -(freq * torch.log(freq + 1e-8)).sum()
 print("==> Token entropy:", entropy.item())
 print("==> Max entropy:", torch.log(torch.tensor(K)).item())
 
+##################################################
+#### STEP 2: CONVERT JETS TO TOKEN SEQUENCES  ####
+##################################################
+
+#Tokenization function
+def tokenize_batch(model, x, mask):
+    with torch.no_grad():
+        z = model.encoder(x)
+        z_real = z[mask.bool()]
+        _, tokens, _ = model.vq(z_real)
+
+        # rebuild padded token tensor
+        token_tensor = torch.zeros_like(mask, dtype=torch.long)
+        token_tensor[mask.bool()] = tokens
+
+    return token_tensor
+
+#Build token dataset (offline step)
+print("==> Build token dataset.")
+all_tokens = []
+all_masks = []
+all_labels = []
+
+# at this point no need for "last" model,
+# just use "best" model for transformer
+model = model_best_val_loss
+model.eval()
+
+for x, mask, jet_pt, labels in loader:
+    x = x.cuda()
+    mask = mask.cuda()
+
+    tokens = tokenize_batch(model, x, mask)
+
+    all_tokens.append(tokens.cpu())
+    all_masks.append(mask.cpu())
+    all_labels.append(labels)
+
+TOKENS = torch.cat(all_tokens)
+MASKS  = torch.cat(all_masks)
+LABELS = torch.cat(all_labels)
+
+#Save
+torch.save({
+    "tokens": TOKENS,
+    "mask": MASKS,
+    "labels": LABELS
+}, input_data_dir+"tokenized_dataset.pt")
+
+#Token dataset
+class TokenDataset(torch.utils.data.Dataset):
+    def __init__(self, tokens, mask, labels):
+        self.tokens = tokens
+        self.mask = mask
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.tokens)
+
+    def __getitem__(self, i):
+        return self.tokens[i], self.mask[i], self.labels[i]
+ 
 ### Make post-VQ-VAE part
 ### of trainings optional
 if train_transformer:
 
-    ##################################################
-    #### STEP 2: CONVERT JETS TO TOKEN SEQUENCES  ####
-    ##################################################
-    
-    #Tokenization function
-    def tokenize_batch(model, x, mask):
-        with torch.no_grad():
-            z = model.encoder(x)
-            z_real = z[mask.bool()]
-            _, tokens, _ = model.vq(z_real)
-    
-            # rebuild padded token tensor
-            token_tensor = torch.zeros_like(mask, dtype=torch.long)
-            token_tensor[mask.bool()] = tokens
-    
-        return token_tensor
-    
-    #Build token dataset (offline step)
-    print("==> Build token dataset.")
-    all_tokens = []
-    all_masks = []
-    all_labels = []
-    
-    # at this point no need for "last" model,
-    # just use "best" model for transformer
-    model = model_best_val_loss
-    model.eval()
-    
-    for x, mask, jet_pt, labels in loader:
-        x = x.cuda()
-        mask = mask.cuda()
-    
-        tokens = tokenize_batch(model, x, mask)
-    
-        all_tokens.append(tokens.cpu())
-        all_masks.append(mask.cpu())
-        all_labels.append(labels)
-    
-    TOKENS = torch.cat(all_tokens)
-    MASKS  = torch.cat(all_masks)
-    LABELS = torch.cat(all_labels)
-    
-    #Save
-    torch.save({
-        "tokens": TOKENS,
-        "mask": MASKS,
-        "labels": LABELS
-    }, input_data_dir+"tokenized_dataset.pt")
-    
-    #Token dataset
-    class TokenDataset(torch.utils.data.Dataset):
-        def __init__(self, tokens, mask, labels):
-            self.tokens = tokens
-            self.mask = mask
-            self.labels = labels
-    
-        def __len__(self):
-            return len(self.tokens)
-    
-        def __getitem__(self, i):
-            return self.tokens[i], self.mask[i], self.labels[i]
-    
+   
     #################################################
     #### STEP 3: TRAIN A TRANSFORMER CLASSIFIER  ####
     #################################################
