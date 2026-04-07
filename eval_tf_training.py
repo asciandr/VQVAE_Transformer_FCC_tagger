@@ -75,6 +75,7 @@ val_loader = DataLoader(
 )
 
 # Retrieve transformer model
+print("==> Retrieving TF model.")
 from tf_model import JetTransformer
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
 tf_model.load_state_dict(torch.load("best_tf.pt"))
@@ -114,6 +115,7 @@ n_classes = probs.shape[1]
 labels_np = labels.cpu().numpy()
 probs_np = probs.numpy()
 
+print("==> Plotting ROCs.")
 for c in range(n_classes):  # signal class
 
     plt.figure()
