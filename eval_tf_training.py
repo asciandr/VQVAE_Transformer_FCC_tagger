@@ -19,7 +19,6 @@ K=64
 
 #load data
 print("==> Loading the dataset.")
-import torch
 # set how tensors are shared between processes (DataLoader workers) 
 # -> uses disk-backed files (no sharing, N.B. not strictly needed if num_workers=0)
 ##torch.multiprocessing.set_sharing_strategy('file_system')
@@ -53,7 +52,7 @@ from torch.utils.data import random_split
 dataset = TokenDataset(TOKENS, MASKS, LABELS)
 
 n_total = len(dataset)
-n_train = int(0.9 * n_total)
+n_train = int(0.99999 * n_total)
 n_val   = n_total - n_train
 
 train_dataset, val_dataset = random_split(dataset, [n_train, n_val])
@@ -98,7 +97,7 @@ def evaluate_perf(model, loader):
             all_labels.append(labels)
     return torch.cat(all_logits),torch.cat(all_labels)
 
-all_logits,all_labels = evaluate_perf(tf_model, val_loader)
+all_logits,all_labels = evaluate_perf(tf_model, train_loader)
 
 # Convert to probabilities
 probs = torch.softmax(all_logits, dim=1)   # [N, 7]
@@ -147,3 +146,79 @@ for c in range(n_classes):  # signal class
 
     plt.savefig(f"roc_pairwise_{class_names[c]}.png")
     plt.close()
+
+# compute token freq vs. class
+token_counts = torch.zeros(n_classes, K)
+
+for tokens, mask, labels in train_loader:
+    for c in range(n_classes):
+        mask_c = (labels == c)
+
+        if mask_c.sum() == 0:
+            continue
+
+        t = tokens[mask_c]           # [Nc, N]
+        m = mask[mask_c]
+
+        t = t[m.bool()]              # flatten valid tokens
+        counts = torch.bincount(t, minlength=K)
+
+        token_counts[c] += counts
+
+# Normalize ->  probability
+token_probs = token_counts / token_counts.sum(dim=1, keepdim=True)
+
+# Compare two classes (e.g. b vs c)
+c1, c2 = 6, 5  # example: b vs c
+score = token_probs[c1] / (token_probs[c2] + 1e-6)
+# Most discriminating tokens
+top_tokens = torch.argsort(score, descending=True)[:10]
+print("==> Top 10 tokens for b vs. c discrimination:")
+print("\t", top_tokens)
+
+### FIXME TO-DO 
+### Extract PF features assigned to top-ranked token
+##selected_token = top_tokens[0]
+##
+##features_list = []
+##
+##with torch.no_grad():
+##    for x, mask, _ in train_loader:  # PF features
+##        x = x.cuda()
+##        mask = mask.cuda()
+##
+##        _, tokens, _ = vqvae(x, mask)
+##
+##        mask_sel = (tokens == selected_token) & mask.bool()
+##
+##        feats = x[mask_sel]
+##        features_list.append(feats.cpu())
+##
+##features = torch.cat(features_list)
+##
+###  Plot feature distributions
+##for i in range(features.shape[1]):
+##    plt.hist(features[:, i].numpy(), bins=50)
+##    plt.title(f"Feature {i} for token {selected_token}")
+##    plt.savefig("feature_token.png")
+##
+### Transformer-level importance
+### Gradient-based importance
+##tokens = tokens.cuda()
+##tokens.requires_grad = False
+##
+##emb = model.embedding(tokens)
+##emb.requires_grad_(True)
+##
+##logits = model.forward_from_embedding(emb, mask)
+##loss = criterion(logits, labels)
+##
+##loss.backward()
+##
+##importance = emb.grad.abs().sum(dim=-1)  # [B, N]
+### Aggregate per token
+##token_importance = torch.zeros(K)
+##
+##for t, imp, m in zip(tokens, importance, mask):
+##    for token_id in range(K):
+##        token_importance[token_id] += imp[(t == token_id) & m.bool()].sum()
