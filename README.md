@@ -14,4 +14,8 @@ python3 training.py
 # Use tokenized dataset from it
 # to run transformer training
 python3 tf_training.py
+# Evaluate tf performance
+# with ROC plots 
+# (NB it loads model from tf_model.py)
+python3 eval_tf_training.py
 ```
