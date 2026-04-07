@@ -75,6 +75,14 @@ val_loader = DataLoader(
     pin_memory=False
 )
 
+# Compute class weights
+# to compensate class imbalance
+counts = torch.bincount(LABELS)
+weights = 1.0 / counts.float()
+weights = weights / weights.sum() * len(counts)
+print("==> Weights to compensate class imbalance")
+print("\t",weights)
+
 #################################################
 #### STEP 2: TRAIN A TRANSFORMER CLASSIFIER  ####
 #################################################
@@ -140,7 +148,7 @@ def evaluate(model, loader):
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
 
 optimizer = torch.optim.AdamW(tf_model.parameters(), lr=1e-4)
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(weight=weights.cuda())
 
 print("==> Run transformer classifier training.")
 # clear garbage after each epoch
@@ -174,7 +182,7 @@ for epoch in range(m_epochs):
     val_loss = evaluate(tf_model, val_loader)
 
     print(f"\tEpoch {epoch}: train={train_loss:.4f}, val={val_loss:.4f}")
-
+    # debugging
     #print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
     #print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
     #print("RAM (GB):", process.memory_info().rss / 1024**3)
