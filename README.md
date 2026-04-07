@@ -9,5 +9,9 @@ ulimit -s unlimited
 python3 process_data.py
 singularity shell -B /gpfs01/ --nv /usatlas/u/asciandra/colorsinglet.sif
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+# Run VQ-VAE training
 python3 training.py
+# Use tokenized dataset from it
+# to run transformer training
+python3 tf_training.py
 ```
