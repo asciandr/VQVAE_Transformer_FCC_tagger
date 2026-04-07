@@ -117,7 +117,25 @@ class JetTransformer(nn.Module):
         logits = self.classifier(x)
         return logits
 
-#Traning loop
+# Add validation
+def evaluate(model, loader):
+    model.eval()
+    total_loss = 0.0
+
+    with torch.no_grad():
+        for tokens, mask, labels in loader:
+            tokens = tokens.cuda()
+            mask   = mask.cuda()
+            labels = labels.cuda()
+
+            logits = model(tokens, mask)
+            loss = criterion(logits, labels)
+
+            total_loss += loss.item()
+
+    return total_loss / len(loader)
+
+# Training loop
 
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
 
@@ -127,17 +145,20 @@ criterion = nn.CrossEntropyLoss()
 print("==> Run transformer classifier training.")
 # clear garbage after each epoch
 import gc
+# select epoch with lowest val loss
+best_val = float("inf")
 for epoch in range(m_epochs):
     tf_model.train()
+    train_loss = 0.0
 
-    print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
-    print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
-    print("RAM (GB):", process.memory_info().rss / 1024**3)
+    # debugging
+    #print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
+    #print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
+    #print("RAM (GB):", process.memory_info().rss / 1024**3)
     for tokens, mask, labels in train_loader:
-        with torch.no_grad():
-            tokens = tokens.cuda(non_blocking=True)
-            mask = mask.cuda(non_blocking=True)
-            labels = labels.cuda(non_blocking=True)
+        tokens = tokens.cuda(non_blocking=True)
+        mask = mask.cuda(non_blocking=True)
+        labels = labels.cuda(non_blocking=True)
 
         optimizer.zero_grad()
 
@@ -146,12 +167,24 @@ for epoch in range(m_epochs):
 
         loss.backward()
         optimizer.step()
-    print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
-    print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
-    print("RAM (GB):", process.memory_info().rss / 1024**3)
 
-    print(f"\tEpoch {epoch}: loss = {loss.item():.4f}")
+        train_loss += loss.item()
+
+    train_loss /= len(train_loader)
+    val_loss = evaluate(tf_model, val_loader)
+
+    print(f"\tEpoch {epoch}: train={train_loss:.4f}, val={val_loss:.4f}")
+
+    #print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
+    #print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
+    #print("RAM (GB):", process.memory_info().rss / 1024**3)
+
     gc.collect()
     del loss, logits
 
-torch.save(tf_model.state_dict(),"TransformerClassifier_model.pt")
+    if val_loss < best_val:
+        best_val = val_loss
+        torch.save(tf_model.state_dict(), "best_tf.pt")
+        print("  → Saved new best model")
+
+torch.save(tf_model.state_dict(),"last_tf.pt")
