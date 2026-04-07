@@ -89,18 +89,20 @@ print("\t",weights)
 
 #Model definition
 class JetTransformer(nn.Module):
-    def __init__(self, num_tokens, d_model=128, nhead=4, num_layers=4, num_classes=5):
+    def __init__(self, num_tokens, d_model=128, nhead=4, num_layers=4, num_classes=7):
         super().__init__()
 
         self.embedding = nn.Embedding(num_tokens, d_model)
 
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=4*d_model,
+            batch_first=True
+        )
+
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=d_model,
-                nhead=nhead,
-                dim_feedforward=4*d_model,
-                batch_first=True
-            ),
+            encoder_layer,
             num_layers=num_layers
         )
 
