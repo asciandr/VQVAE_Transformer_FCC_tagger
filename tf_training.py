@@ -98,6 +98,9 @@ class JetTransformer(nn.Module):
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=4*d_model,
+            # add dropout 
+            # to prevent overfitting
+            dropout=0.1,
             batch_first=True
         )
 
@@ -149,8 +152,12 @@ def evaluate(model, loader):
 
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
 
-optimizer = torch.optim.AdamW(tf_model.parameters(), lr=1e-4)
+optimizer = torch.optim.AdamW(tf_model.parameters(), lr=5e-5)
 criterion = nn.CrossEntropyLoss(weight=weights.cuda())
+
+# Add Gradient Clipping 
+# to stabilize the training
+nn.utils.clip_grad_norm_(tf_model.parameters(), 1.0)
 
 print("==> Run transformer classifier training.")
 # clear garbage after each epoch
