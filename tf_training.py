@@ -11,7 +11,9 @@ n_classes=7
 # training of Transformer-based classifier
 m_epochs=20
 # number of PF features
-K=64
+#K=64
+#K=128
+K=256
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####

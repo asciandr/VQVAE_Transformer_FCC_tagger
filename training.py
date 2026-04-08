@@ -4,7 +4,7 @@
 n_classes=7
 # training of unsupervised VQ-VAE tokenizer
 #n_epochs=1
-n_epochs=5
+n_epochs=15
 #n_epochs=10
 # number of PF features
 N_FEAT=35
@@ -182,7 +182,9 @@ class JetVQVAE(nn.Module):
     #def __init__(self, D=32, K=64):
     #def __init__(self, D=16, K=16):
     #def __init__(self, D=16, K=32):
-    def __init__(self, D=16, K=64):
+    #def __init__(self, D=16, K=64):
+    #def __init__(self, D=16, K=128):
+    def __init__(self, D=32, K=256):
         super().__init__()
 
         self.encoder = nn.Sequential(

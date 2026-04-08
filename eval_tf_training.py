@@ -11,7 +11,9 @@ n_classes=7
 # training of Transformer-based classifier
 m_epochs=20
 # number of PF features
-K=64
+#K=64
+#K=128
+K=256
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
@@ -169,6 +171,15 @@ for tokens, mask, labels in train_loader:
 
 # Normalize ->  probability
 token_probs = token_counts / token_counts.sum(dim=1, keepdim=True)
+
+# Perplexity (standard in VQ-VAE)
+# metrics for codebook efficiency
+p = token_counts / token_counts.sum()
+perplexity = torch.exp(-(p * torch.log(p + 1e-10)).sum())
+
+print("==> Perplexity: torch.exp(-(p * torch.log(p + 1e-10)).sum())")
+print("\t",perplexity)
+print("\tIs it better than 10% of K=",K ," ?")
 
 # Compare two classes (e.g. b vs c)
 c1, c2 = 6, 5  # example: b vs c
