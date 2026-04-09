@@ -184,7 +184,12 @@ class JetVQVAE(nn.Module):
     #def __init__(self, D=16, K=32):
     #def __init__(self, D=16, K=64):
     #def __init__(self, D=16, K=128):
-    def __init__(self, D=32, K=256):
+    #def __init__(self, D=32, K=256):
+    def __init__(self, D=64, K=256):
+    # NB K=256 proves to saturate
+    # codebook size efficiency
+    # ==> re-check with much larger stats
+    #def __init__(self, D=32, K=512):
         super().__init__()
 
         self.encoder = nn.Sequential(
