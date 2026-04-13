@@ -120,7 +120,6 @@ val_loader = torch.utils.data.DataLoader(
     #pin_memory=True
 )
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as FNC
 
