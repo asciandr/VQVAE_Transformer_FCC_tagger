@@ -11,12 +11,24 @@ libc = ctypes.CDLL("libc.so.6")
 # =========================
 # CONFIG
 # =========================
-file_name = "/atlasgpfs01/usatlas/workarea/asciandra/training/reduced800kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root"
+file_name = "/atlasgpfs01/usatlas/workarea/asciandra/training/reduced100kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root"
+#file_name = "/atlasgpfs01/usatlas/workarea/asciandra/training/reduced3Mjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root"
+#file_name = "/atlasgpfs01/usatlas/workarea/asciandra/training/reduced800kjets_inputs/FSR_studies_IDEA_lighterBP_50pc_7labels_out_Hbb_cc_ss_dd_uu_gg_tautau.root"
 tree_name = "tree"
-output_file = "/gpfs01/usfcc/asciandra/tokenization/prealloc_fcc_ee_7classes_35features_5_6Mjets_pf.h5"
+output_file = "/gpfs01/usfcc/asciandra/tokenization/val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
+#output_file = "/gpfs01/usfcc/asciandra/tokenization/prealloc_fcc_ee_7classes_35features_21Mjets_pf.h5"
+#output_file = "/gpfs01/usfcc/asciandra/tokenization/prealloc_fcc_ee_7classes_35features_5_6Mjets_pf.h5"
 N_MAX = 75
 CHUNK_SIZE = 20000   # safe value
-TOTAL = 42_099_532   # or tree.num_entries
+# total number of jets to be processed
+file = uproot.open(file_name)
+tree = file[tree_name]
+TOTAL = tree.num_entries
+#TOTAL = 700_000   # or tree.num_entries
+#TOTAL = 5_600_000   # or tree.num_entries
+#TOTAL = 21_000_000   # or tree.num_entries
+#TOTAL = 42_099_532   # or tree.num_entries
+file.Close()
 
 feature_branches = [   # per-particle features (jagged)
 	"pfcand_erel_log",
