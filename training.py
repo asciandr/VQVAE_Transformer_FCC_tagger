@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 ### job handles ###
-n_classes=7
 # training of unsupervised VQ-VAE tokenizer
 #n_epochs=1
 n_epochs=15
