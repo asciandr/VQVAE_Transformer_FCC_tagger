@@ -35,29 +35,29 @@ import h5py
 
 # Dataset class
 class H5JetDataset(Dataset):
-    def __init__(self, file_path):
-        self.file_path = file_path
-        self.file = None
+    def __init__(self, file_path, batch_size):
+        self.file = h5py.File(file_path, "r")
 
-    def _ensure_open(self):
-        if self.file is None:
-            self.file = h5py.File(self.file_path, "r")
-            self.X = self.file["X"]
-            self.mask = self.file["mask"]
-            self.jet_pt = self.file["jet_pt"]
-            self.labels = self.file["labels"]
+        self.X = self.file["X"]
+        self.mask = self.file["mask"]
+        self.jet_pt = self.file["jet_pt"]
+        self.labels = self.file["labels"]
+
+        self.batch_size = batch_size
+        self.N = self.X.shape[0]
 
     def __len__(self):
-        self._ensure_open()
-        return self.X.shape[0]
+        return self.N // self.batch_size
 
-    def __getitem__(self, i):
-        self._ensure_open()
+    def __getitem__(self, idx):
+        start = idx * self.batch_size
+        end = start + self.batch_size
+
         return (
-            torch.from_numpy(self.X[i]),
-            torch.from_numpy(self.mask[i]),
-            torch.tensor(self.jet_pt[i]),
-            torch.tensor(self.labels[i])
+            torch.from_numpy(self.X[start:end]),
+            torch.from_numpy(self.mask[start:end]),
+            torch.from_numpy(self.jet_pt[start:end]),
+            torch.from_numpy(self.labels[start:end])
         )
 
 # use already standardized
@@ -67,26 +67,26 @@ if not use_std_data:
     print("==> Loading the dataset.")
     torch.multiprocessing.set_sharing_strategy('file_system')
     
-    dataset     = H5JetDataset(input_data_dir+train_file)
-    val_dataset = H5JetDataset(input_data_dir+val_file)
+    dataset     = H5JetDataset(input_data_dir+train_file, batch_size=8192)
+    val_dataset = H5JetDataset(input_data_dir+val_file, batch_size=8192)
     
     print("==> DataLoaders...")
     # DataLoaders
     loader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=2048,
+        batch_size=None,   # IMPORTANT
         shuffle=False,
-        num_workers=4,
-        pin_memory=False
+        pin_memory=True,
+        num_workers=0      # IMPORTANT
     )
-    
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
-        batch_size=256,
-        shuffle=False,     # IMPORTANT
-        num_workers=4,
-        pin_memory=True
+        batch_size=None,   # IMPORTANT
+        shuffle=False,
+        pin_memory=True,
+        num_workers=0      # IMPORTANT
     )
+
     
     if not donot_std:
         print("==> Compute mean and std.")
@@ -221,25 +221,24 @@ else:
 
 print("==> Standardized Datasets...")
 # Replace with standardized Datasets
-dataset     = H5JetDataset(input_data_dir + "train_standardized.h5")
-val_dataset = H5JetDataset(input_data_dir + "val_standardized.h5")
+dataset     = H5JetDataset(input_data_dir + "train_standardized.h5", batch_size=8192)
+val_dataset = H5JetDataset(input_data_dir + "val_standardized.h5", batch_size=8192)
 
 print("==> Standardized DataLoaders...")
 # Replace with standardized DataLoaders
 loader = torch.utils.data.DataLoader(
     dataset,
-    batch_size=2048,
+    batch_size=None,   # IMPORTANT
     shuffle=False,
-    num_workers=4,
-    pin_memory=False
+    pin_memory=True,
+    num_workers=0      # IMPORTANT
 )
-
 val_loader = torch.utils.data.DataLoader(
     val_dataset,
-    batch_size=256,
-    shuffle=False,     # IMPORTANT
-    num_workers=4,
-    pin_memory=True
+    batch_size=None,   # IMPORTANT
+    shuffle=False,
+    pin_memory=True,
+    num_workers=0      # IMPORTANT
 )
 
 # clean-up
