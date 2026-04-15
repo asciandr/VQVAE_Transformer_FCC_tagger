@@ -28,7 +28,7 @@ TOTAL = tree.num_entries
 #TOTAL = 5_600_000   # or tree.num_entries
 #TOTAL = 21_000_000   # or tree.num_entries
 #TOTAL = 42_099_532   # or tree.num_entries
-file.Close()
+file.close()
 
 feature_branches = [   # per-particle features (jagged)
 	"pfcand_erel_log",
