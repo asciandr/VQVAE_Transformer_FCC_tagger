@@ -79,6 +79,16 @@ print("\t\tstd  (valid PFs):", X_valid.std())
 #print(X.device, MASK.device)
 # debugging
 
+torch.save(
+    {
+        "X": X,
+        "mask": MASK,
+        "jet_pt": JET_PT,
+        "labels": LABELS
+    },
+    "/gpfs01/usfcc/asciandra/tokenization/standardized_fcc_ee_7classes_35features_700kjets_pf.pt"
+)
+
 from torch.utils.data import Dataset
 
 class TensorJetDataset(Dataset):
