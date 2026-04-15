@@ -2,15 +2,15 @@
 
 ### job handles ###
 # input datasets
-#input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
-# FIXME test to compare with pt approach
-input_data_dir="/gpfs01/usfcc/asciandra/tokenization/TEST/"
-#train_file  = "prealloc_fcc_ee_7classes_35features_5_6Mjets_pf.h5"
-#val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
-# FIXME test to compare with pt approach
-train_file  = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
-val_file    = "val_prealloc_fcc_ee_7classes_35features_70kjets_pf.h5"
+input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
+#input_data_dir="/gpfs01/usfcc/asciandra/tokenization/TEST/"
+train_file  = "prealloc_fcc_ee_7classes_35features_5_6Mjets_pf.h5"
+val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
+#train_file  = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
+#val_file    = "val_prealloc_fcc_ee_7classes_35features_70kjets_pf.h5"
 # training of unsupervised VQ-VAE tokenizer
+IO_BATCH = 4096     # efficient disk read
+TRAIN_BATCH = 256   # good for VQ-VAE
 #n_epochs=1
 n_epochs=15
 #n_epochs=10
@@ -18,7 +18,6 @@ n_epochs=15
 N_FEAT=35
 # want to use already standardized
 # dataset in input_data_dir?
-# FIXME test to compare with pt approach
 use_std_data=True
 # need to compute mean & std 
 # for input standardization?
@@ -34,8 +33,8 @@ from torch.utils.data import Dataset
 import h5py
 
 # Dataset class
-class H5JetDataset(Dataset):
-    def __init__(self, file_path, batch_size):
+class H5JetDataset(torch.utils.data.Dataset):
+    def __init__(self, file_path, io_batch_size):
         self.file = h5py.File(file_path, "r")
 
         self.X = self.file["X"]
@@ -43,15 +42,15 @@ class H5JetDataset(Dataset):
         self.jet_pt = self.file["jet_pt"]
         self.labels = self.file["labels"]
 
-        self.batch_size = batch_size
+        self.io_batch_size = io_batch_size
         self.N = self.X.shape[0]
 
     def __len__(self):
-        return self.N // self.batch_size
+        return self.N // self.io_batch_size
 
     def __getitem__(self, idx):
-        start = idx * self.batch_size
-        end = start + self.batch_size
+        start = idx * self.io_batch_size
+        end = start + self.io_batch_size
 
         return (
             torch.from_numpy(self.X[start:end]),
@@ -67,8 +66,8 @@ if not use_std_data:
     print("==> Loading the dataset.")
     torch.multiprocessing.set_sharing_strategy('file_system')
     
-    dataset     = H5JetDataset(input_data_dir+train_file, batch_size=8192)
-    val_dataset = H5JetDataset(input_data_dir+val_file, batch_size=8192)
+    dataset     = H5JetDataset(input_data_dir+train_file, io_batch_size=IO_BATCH)
+    val_dataset = H5JetDataset(input_data_dir+val_file, io_batch_size=IO_BATCH)
     
     print("==> DataLoaders...")
     # DataLoaders
@@ -221,8 +220,8 @@ else:
 
 print("==> Standardized Datasets...")
 # Replace with standardized Datasets
-dataset     = H5JetDataset(input_data_dir + "train_standardized.h5", batch_size=8192)
-val_dataset = H5JetDataset(input_data_dir + "val_standardized.h5", batch_size=8192)
+dataset     = H5JetDataset(input_data_dir + "train_standardized.h5",    io_batch_size=IO_BATCH)
+val_dataset = H5JetDataset(input_data_dir + "val_standardized.h5",      io_batch_size=IO_BATCH)
 
 print("==> Standardized DataLoaders...")
 # Replace with standardized DataLoaders
@@ -381,47 +380,61 @@ for epoch in range(n_epochs):
     # ---- TRAINING ----
     model.train()
     train_loss = 0.0
+    n_train_steps = 0   # 🔥 IMPORTANT
 
-    for x, mask, jet_pt, labels in loader:
-        x = x.cuda(non_blocking=True)
-        mask = mask.cuda(non_blocking=True)
+    for X_big, M_big, jet_pt_big, labels_big in loader:
 
-        opt.zero_grad(set_to_none=True)
-        _, tokens, loss = model(x, mask)
-        loss.backward()
-        opt.step()
+        # shuffle inside macro-batch
+        perm = torch.randperm(X_big.size(0))
+        X_big = X_big[perm]
+        M_big = M_big[perm]
 
-        train_loss += loss.item()
-        # debugging
-        #print(loss.shape)
-        if loss.item()>10:
-            print("WARNING: very large train loss:", loss.item())
-        #print("train mask sum:", mask.sum().item())
-        #print("train x mean:", x.abs().mean().item())
-        #print("train loss per element:", loss.item() / (mask.sum().item() * N_FEAT))
+        # split into micro-batches
+        for i in range(0, X_big.size(0), TRAIN_BATCH):
 
-    train_loss /= len(loader)
-    if train_loss>10:
+            x = X_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
+            mask = M_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
+
+            opt.zero_grad(set_to_none=True)
+
+            _, tokens, loss = model(x, mask)
+            loss.backward()
+            opt.step()
+
+            train_loss += loss.item()
+            n_train_steps += 1
+
+            if loss.item() > 10:
+                print("WARNING: very large train loss:", loss.item())
+
+    train_loss /= n_train_steps   # -> FIXED
+
+    if train_loss > 10:
         print("WARNING: very large AVERAGE LOSS:", train_loss)
 
     # ---- VALIDATION ----
     model.eval()
     val_loss = 0.0
+    n_val_steps = 0   # 🔥 IMPORTANT
 
     with torch.no_grad():
-        for x, mask, jet_pt, labels in val_loader:
-            x = x.cuda(non_blocking=True)
-            mask = mask.cuda(non_blocking=True)
+        for X_big, M_big, jet_pt_big, labels_big in val_loader:
 
-            _, tokens, loss = model(x, mask)
-            val_loss += loss.item()
-            # debugging
-            #print("val loss:", loss.item())
-            #print("val mask sum:", mask.sum().item())
-            #print("val x mean:", x.abs().mean().item())
+            # no shuffle for validation
 
-    val_loss /= len(val_loader)
-    # Save best epoch
+            for i in range(0, X_big.size(0), TRAIN_BATCH):
+
+                x = X_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
+                mask = M_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
+
+                _, tokens, loss = model(x, mask)
+
+                val_loss += loss.item()
+                n_val_steps += 1
+
+    val_loss /= n_val_steps   # -> FIXED
+
+    # ---- SAVE BEST ----
     if val_loss < best_val_loss:
         best_val_loss = val_loss
         torch.save(model.state_dict(), "JetVQVAE_best.pt")
