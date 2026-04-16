@@ -34,7 +34,7 @@ PT_h5 = f["jet_pt"]
 LABELS_h5 = f["labels"]
 print("PRINTING STATS")
 print("PT shape:", X_pt.shape)
-print("H5 shape:", X_pt.shape)
+print("H5 shape:", X_h5.shape)
 print("==========================")
 print("PT mean:", X_pt[:10000].mean())
 print("H5 mean:", X_h5[:10000].mean())
