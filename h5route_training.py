@@ -383,6 +383,9 @@ for epoch in range(n_epochs):
     n_train_steps = 0   # 🔥 IMPORTANT
 
     for X_big, M_big, jet_pt_big, labels_big in loader:
+        # move entire macro-batch to GPU once
+        X_big = X_big.cuda(non_blocking=True)
+        M_big = M_big.cuda(non_blocking=True)
 
         # shuffle inside macro-batch
         perm = torch.randperm(X_big.size(0))
@@ -392,10 +395,23 @@ for epoch in range(n_epochs):
         # split into micro-batches
         for i in range(0, X_big.size(0), TRAIN_BATCH):
 
-            x = X_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
-            mask = M_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
+            x = X_big[i:i+TRAIN_BATCH]
+            mask = M_big[i:i+TRAIN_BATCH]
+            # skip empty batches 
+            # (with >~10M jets it can happen to have jets with 0 constituents after cuts/padding)
+            if mask.sum().item() == 0:
+                continue
 
             opt.zero_grad(set_to_none=True)
+
+            #debugging
+            if not torch.isfinite(x).all():
+                print("NaNs in X!")
+                exit()
+            
+            if not torch.isfinite(mask).all():
+                print("NaNs in MASK!")
+                exit()
 
             _, tokens, loss = model(x, mask)
             loss.backward()
@@ -406,6 +422,11 @@ for epoch in range(n_epochs):
 
             if loss.item() > 10:
                 print("WARNING: very large train loss:", loss.item())
+            if not torch.isfinite(loss):
+                print("LOSS IS NAN")
+                print("x stats:", x.mean().item(), x.std().item(), x.abs().max().item())
+                print("mask sum:", mask.sum().item())
+                exit()
 
     train_loss /= n_train_steps   # -> FIXED
 
@@ -419,13 +440,16 @@ for epoch in range(n_epochs):
 
     with torch.no_grad():
         for X_big, M_big, jet_pt_big, labels_big in val_loader:
+            # move entire macro-batch to GPU once
+            X_big = X_big.cuda(non_blocking=True)
+            M_big = M_big.cuda(non_blocking=True)
 
             # no shuffle for validation
 
             for i in range(0, X_big.size(0), TRAIN_BATCH):
 
-                x = X_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
-                mask = M_big[i:i+TRAIN_BATCH].cuda(non_blocking=True)
+                x = X_big[i:i+TRAIN_BATCH]
+                mask = M_big[i:i+TRAIN_BATCH]
 
                 _, tokens, loss = model(x, mask)
 

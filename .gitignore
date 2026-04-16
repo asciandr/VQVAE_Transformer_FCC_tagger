@@ -2,3 +2,4 @@
 *.png
 OLDSTUFF/
 __pycache__
+*log*
