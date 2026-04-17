@@ -11,8 +11,8 @@ val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
 # training of unsupervised VQ-VAE tokenizer
 IO_BATCH = 4096     # efficient disk read
 TRAIN_BATCH = 256   # good for VQ-VAE
-#n_epochs=1
-n_epochs=15
+n_epochs=1
+#n_epochs=15
 #n_epochs=10
 # number of PF features
 N_FEAT=35
@@ -386,6 +386,16 @@ for epoch in range(n_epochs):
         # move entire macro-batch to GPU once
         X_big = X_big.cuda(non_blocking=True)
         M_big = M_big.cuda(non_blocking=True)
+        # get rid of empty entries
+        # NB NOT an issue with data, but h5 reprocessing
+        # where the total n. of jets did not come from tree.entries!
+        valid = M_big.sum(dim=1) > 0
+        X_big = X_big[valid]
+        M_big = M_big[valid]
+        # debugging
+        #if epoch==0:
+        #    print("train labels:", labels_big)
+        #    print("train X mean/std:", X_big.mean(), X_big.std())
 
         # shuffle inside macro-batch
         perm = torch.randperm(X_big.size(0))
@@ -398,8 +408,8 @@ for epoch in range(n_epochs):
             x = X_big[i:i+TRAIN_BATCH]
             mask = M_big[i:i+TRAIN_BATCH]
             # skip empty batches 
-            # (with >~10M jets it can happen to have jets with 0 constituents after cuts/padding)
             if mask.sum().item() == 0:
+                print("WARNING: empty batches, shouldn't have jets with 0 constituents?!")
                 continue
 
             opt.zero_grad(set_to_none=True)
@@ -443,6 +453,11 @@ for epoch in range(n_epochs):
             # move entire macro-batch to GPU once
             X_big = X_big.cuda(non_blocking=True)
             M_big = M_big.cuda(non_blocking=True)
+            # debugging
+            #if epoch==0:
+            #    print("val labels:", labels_big)
+            #    print("val X mean/std:", X_big.mean(), X_big.std())
+
 
             # no shuffle for validation
 
