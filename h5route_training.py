@@ -626,6 +626,7 @@ for x, mask, jet_pt, labels in loader:
 
     x = x.cuda()
     mask = mask.cuda()
+    labels = labels.cuda()
     # get rid of empty entries
     # NB NOT an issue with data, but h5 reprocessing
     # where the total n. of jets did not come from tree.entries!
