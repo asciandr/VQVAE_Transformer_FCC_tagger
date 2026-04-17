@@ -625,6 +625,12 @@ model.eval()
 for x, mask, jet_pt, labels in loader:
     x = x.cuda()
     mask = mask.cuda()
+    # get rid of empty entries
+    # NB NOT an issue with data, but h5 reprocessing
+    # where the total n. of jets did not come from tree.entries!
+    valid = mask.sum(dim=1) > 0
+    x       = x[valid]
+    mask    = mask[valid]
 
     tokens = tokenize_batch(model, x, mask)
 
@@ -642,17 +648,4 @@ torch.save({
     "mask": MASKS,
     "labels": LABELS
 }, input_data_dir+"tokenized_dataset.pt")
-
-#Token dataset
-class TokenDataset(torch.utils.data.Dataset):
-    def __init__(self, tokens, mask, labels):
-        self.tokens = tokens
-        self.mask = mask
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.tokens)
-
-    def __getitem__(self, i):
-        return self.tokens[i], self.mask[i], self.labels[i]
 
