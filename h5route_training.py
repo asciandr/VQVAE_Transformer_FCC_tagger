@@ -623,14 +623,20 @@ model = model_best_val_loss
 model.eval()
 
 for x, mask, jet_pt, labels in loader:
+
     x = x.cuda()
     mask = mask.cuda()
     # get rid of empty entries
     # NB NOT an issue with data, but h5 reprocessing
     # where the total n. of jets did not come from tree.entries!
     valid = mask.sum(dim=1) > 0
+
     x       = x[valid]
     mask    = mask[valid]
+    labels  = labels[valid]
+
+    if x.shape[0] == 0:
+        continue
 
     tokens = tokenize_batch(model, x, mask)
 
