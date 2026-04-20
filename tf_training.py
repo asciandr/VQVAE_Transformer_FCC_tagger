@@ -10,11 +10,13 @@ input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
 n_classes=7
 # training of Transformer-based classifier
 m_epochs=20
-# number of PF features
+# codebook size
 #K=64
 #K=128
-K=256
-#K=512
+#K=256
+K=512
+# VQ-VAE config
+vqvaeconfig="D128_K512"
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
@@ -31,7 +33,7 @@ import torch
 torch.set_num_threads(1)
 
 #Load
-data = torch.load(input_data_dir+"tokenized_dataset.pt", map_location="cpu")
+data = torch.load(input_data_dir+vqvaeconfig+"_tokenized_dataset.pt", map_location="cpu")
 TOKENS = data["tokens"]
 MASKS  = data["mask"]
 LABELS = data["labels"]
@@ -204,7 +206,7 @@ for epoch in range(m_epochs):
 
     if val_loss < best_val:
         best_val = val_loss
-        torch.save(tf_model.state_dict(), "best_tf.pt")
+        torch.save(tf_model.state_dict(), vqvaeconfig+"_best_tf.pt")
         print("  → Saved new best model")
 
-torch.save(tf_model.state_dict(),"last_tf.pt")
+torch.save(tf_model.state_dict(),vqvaeconfig+"_last_tf.pt")

@@ -652,7 +652,7 @@ torch.save({
     "tokens": TOKENS,
     "mask": MASKS,
     "labels": LABELS
-}, input_data_dir+"tokenized_dataset.pt")
+}, input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_tokenized_dataset.pt")
 
 print("\tVal dataset")
 all_tokens = []
@@ -690,6 +690,6 @@ torch.save({
     "tokens": TOKENS,
     "mask": MASKS,
     "labels": LABELS
-}, input_data_dir+"val_tokenized_dataset.pt")
+}, input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_val_tokenized_dataset.pt")
 
 
