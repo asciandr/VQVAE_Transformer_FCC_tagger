@@ -17,9 +17,9 @@ n_epochs=1
 # NB K=256 proves to saturate
 # codebook size efficiency
 # latent space dimension
-myD=16
+myD=64#16
 # codebook size
-myK=128
+myK=512#128
 # number of PF features
 N_FEAT=35
 # want to use already standardized
@@ -254,7 +254,7 @@ import torch.nn as nn
 import torch.nn.functional as FNC
 
 class VectorQuantizerEMA(nn.Module):
-    def __init__(self, K, D, beta=0.5, decay=0.95, eps=1e-5):
+    def __init__(self, K, D, beta=0.5, decay=0.9, eps=1e-5):
         super().__init__()
         self.K = K
         self.D = D
@@ -313,8 +313,14 @@ class JetVQVAE(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(N_FEAT, 64),
             nn.GELU(),
+            # add encoder regularization
+            nn.Dropout(0.1),
+
             nn.Linear(64, 64),
             nn.GELU(),
+            # add encoder regularization
+            nn.Dropout(0.1),
+
             nn.Linear(64, D),
             nn.LayerNorm(D),
         )

@@ -16,7 +16,7 @@ m_epochs=20
 #K=256
 K=512
 # VQ-VAE config
-vqvaeconfig="D128_K512"
+vqvaeconfig="K512_D128"
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
