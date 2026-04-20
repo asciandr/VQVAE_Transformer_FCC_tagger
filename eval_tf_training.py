@@ -192,6 +192,18 @@ score = token_probs[c1] / (token_probs[c2] + 1e-6)
 top_tokens = torch.argsort(score, descending=True)[:10]
 print("==> Top 10 tokens for b vs. c discrimination:")
 print("\t", top_tokens)
+# s vs. d
+c1, c2 = 4, 3
+score = token_probs[c1] / (token_probs[c2] + 1e-6)
+top_tokens = torch.argsort(score, descending=True)[:10]
+print("==> Top 10 tokens for s vs. d discrimination:")
+print("\t", top_tokens)
+# g vs. d
+c1, c2 = 1, 3
+score = token_probs[c1] / (token_probs[c2] + 1e-6)
+top_tokens = torch.argsort(score, descending=True)[:10]
+print("==> Top 10 tokens for g vs. d discrimination:")
+print("\t", top_tokens)
 
 ### FIXME TO-DO 
 ### Extract PF features assigned to top-ranked token
