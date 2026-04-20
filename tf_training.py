@@ -10,6 +10,10 @@ input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
 n_classes=7
 # training of Transformer-based classifier
 m_epochs=20
+# Early stopping
+patience = 5
+epochs_no_improve = 0
+min_delta = 1e-4
 # codebook size
 #K=64
 #K=128
@@ -204,9 +208,17 @@ for epoch in range(m_epochs):
     gc.collect()
     del loss, logits
 
-    if val_loss < best_val:
+    if val_loss < best_val - min_delta:
         best_val = val_loss
         torch.save(tf_model.state_dict(), vqvaeconfig+"_best_tf.pt")
         print("  → Saved new best model")
+        epochs_no_improve = 0
+    else:
+        epochs_no_improve += 1
+        print(f"  → No improvement ({epochs_no_improve}/{patience})")
+
+        if epochs_no_improve >= patience:
+            print("⛔ Early stopping triggered")
+            break
 
 torch.save(tf_model.state_dict(),vqvaeconfig+"_last_tf.pt")
