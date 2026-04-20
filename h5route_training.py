@@ -14,8 +14,8 @@ TRAIN_BATCH = 256   # good for VQ-VAE
 #n_epochs=1
 #n_epochs=15
 n_epochs=10
-vqvae_patience=3
-vqvae_epochs_no_improve=2
+vqvae_patience=2
+vqvae_epochs_no_improve=0
 # NB K=256 proves to saturate
 # codebook size efficiency
 # latent space dimension
@@ -483,6 +483,7 @@ for epoch in range(n_epochs):
         torch.save(model.state_dict(), best_model_name)
         model_best_val_loss = model
         print("  → Saved new best model")
+        vqvae_epochs_no_improve = 0 
     else:
         vqvae_epochs_no_improve += 1
         print(f"  → No improvement ({vqvae_epochs_no_improve}/{vqvae_patience})")
