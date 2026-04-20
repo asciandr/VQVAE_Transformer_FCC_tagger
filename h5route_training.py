@@ -11,9 +11,11 @@ val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
 # training of unsupervised VQ-VAE tokenizer
 IO_BATCH = 4096     # efficient disk read
 TRAIN_BATCH = 256   # good for VQ-VAE
-n_epochs=1
+#n_epochs=1
 #n_epochs=15
-#n_epochs=10
+n_epochs=10
+vqvae_patience=3
+vqvae_epochs_no_improve=2
 # NB K=256 proves to saturate
 # codebook size efficiency
 # latent space dimension
@@ -481,6 +483,13 @@ for epoch in range(n_epochs):
         torch.save(model.state_dict(), best_model_name)
         model_best_val_loss = model
         print("  → Saved new best model")
+    else:
+        vqvae_epochs_no_improve += 1
+        print(f"  → No improvement ({vqvae_epochs_no_improve}/{vqvae_patience})")
+
+        if vqvae_epochs_no_improve >= vqvae_patience:
+            print("⛔ Early stopping triggered")
+            break
 
     print(f"\tEpoch {epoch}: train = {train_loss:.4f}, val = {val_loss:.4f}")
 
