@@ -14,6 +14,12 @@ TRAIN_BATCH = 256   # good for VQ-VAE
 n_epochs=1
 #n_epochs=15
 #n_epochs=10
+# NB K=256 proves to saturate
+# codebook size efficiency
+# latent space dimension
+myD=16
+# codebook size
+myK=128
 # number of PF features
 N_FEAT=35
 # want to use already standardized
@@ -301,18 +307,7 @@ class VectorQuantizerEMA(nn.Module):
         return z_q, indices.view(z.shape[:-1]), commit_loss
 
 class JetVQVAE(nn.Module):
-    #def __init__(self, D=32, K=256):
-    #def __init__(self, D=32, K=64):
-    #def __init__(self, D=16, K=16):
-    #def __init__(self, D=16, K=32):
-    #def __init__(self, D=16, K=64):
-    #def __init__(self, D=16, K=128):
-    #def __init__(self, D=32, K=256):
-    def __init__(self, D=64, K=256):
-    # NB K=256 proves to saturate
-    # codebook size efficiency
-    # ==> re-check with much larger stats
-    #def __init__(self, D=32, K=512):
+    def __init__(self, D=myD, K=myK):
         super().__init__()
 
         self.encoder = nn.Sequential(
@@ -375,6 +370,7 @@ best_val_loss = float("inf")
 model_best_val_loss = model
 
 print("==> Starting VQ-VAE training loop.")
+best_model_name="K"+str(myK)+"_D"+str(myD)+"_JetVQVAE_best.pt"
 for epoch in range(n_epochs):
 
     # ---- TRAINING ----
@@ -476,14 +472,15 @@ for epoch in range(n_epochs):
     # ---- SAVE BEST ----
     if val_loss < best_val_loss:
         best_val_loss = val_loss
-        torch.save(model.state_dict(), "JetVQVAE_best.pt")
+        torch.save(model.state_dict(), best_model_name)
         model_best_val_loss = model
         print("  → Saved new best model")
 
     print(f"\tEpoch {epoch}: train = {train_loss:.4f}, val = {val_loss:.4f}")
 
 print("==> Save last model too.")
-torch.save(model.state_dict(), "JetVQVAE_last.pt")
+last_model_name="K"+str(myK)+"_D"+str(myD)+"_JetVQVAE_last.pt"
+torch.save(model.state_dict(), last_model_name)
 
 # evaluation and sanity checks
 print("==> Evaluate and check distributions.")
@@ -622,6 +619,7 @@ all_labels = []
 model = model_best_val_loss
 model.eval()
 
+print("\tTrain dataset")
 for x, mask, jet_pt, labels in loader:
 
     x = x.cuda()
@@ -655,4 +653,43 @@ torch.save({
     "mask": MASKS,
     "labels": LABELS
 }, input_data_dir+"tokenized_dataset.pt")
+
+print("\tVal dataset")
+all_tokens = []
+all_masks = []
+all_labels = []
+for x, mask, jet_pt, labels in val_loader:
+
+    x = x.cuda()
+    mask = mask.cuda()
+    labels = labels.cuda()
+    # get rid of empty entries
+    # NB NOT an issue with data, but h5 reprocessing
+    # where the total n. of jets did not come from tree.entries!
+    valid = mask.sum(dim=1) > 0
+
+    x       = x[valid]
+    mask    = mask[valid]
+    labels  = labels[valid]
+
+    if x.shape[0] == 0:
+        continue
+
+    tokens = tokenize_batch(model, x, mask)
+
+    all_tokens.append(tokens.cpu())
+    all_masks.append(mask.cpu())
+    all_labels.append(labels)
+
+TOKENS = torch.cat(all_tokens)
+MASKS  = torch.cat(all_masks)
+LABELS = torch.cat(all_labels)
+
+#Save
+torch.save({
+    "tokens": TOKENS,
+    "mask": MASKS,
+    "labels": LABELS
+}, input_data_dir+"val_tokenized_dataset.pt")
+
 

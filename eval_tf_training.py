@@ -30,7 +30,8 @@ print("==> Loading the dataset.")
 torch.set_num_threads(1)
 
 #Load
-data = torch.load(input_data_dir+"tokenized_dataset.pt", map_location="cpu")
+data = torch.load(input_data_dir+"D128_K512_val_tokenized_dataset.pt", map_location="cpu")
+#data = torch.load(input_data_dir+"D128_K512_tokenized_dataset.pt", map_location="cpu")
 TOKENS = data["tokens"]
 MASKS  = data["mask"]
 LABELS = data["labels"]
