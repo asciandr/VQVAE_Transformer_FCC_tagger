@@ -13,8 +13,10 @@ m_epochs=20
 # number of PF features
 #K=64
 #K=128
-K=256
-#K=512
+#K=256
+K=512
+# VQ-VAE config
+vqvaeconfig="D128_K512"
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
@@ -30,8 +32,8 @@ print("==> Loading the dataset.")
 torch.set_num_threads(1)
 
 #Load
-data = torch.load(input_data_dir+"D128_K512_val_tokenized_dataset.pt", map_location="cpu")
-#data = torch.load(input_data_dir+"D128_K512_tokenized_dataset.pt", map_location="cpu")
+data = torch.load(input_data_dir+vqvaeconfig+"_val_tokenized_dataset.pt", map_location="cpu")
+#data = torch.load(input_data_dir+vqvaeconfig+"_tokenized_dataset.pt", map_location="cpu")
 TOKENS = data["tokens"]
 MASKS  = data["mask"]
 LABELS = data["labels"]
@@ -82,7 +84,7 @@ val_loader = DataLoader(
 print("==> Retrieving TF model.")
 from tf_model import JetTransformer
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
-tf_model.load_state_dict(torch.load("best_tf.pt"))
+tf_model.load_state_dict(torch.load(vqvaeconfig+"_best_tf.pt"))
 
 all_logits = []
 all_labels = []
