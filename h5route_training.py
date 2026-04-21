@@ -594,7 +594,10 @@ plt.xlabel("Token ID")
 plt.ylabel("Frequency")
 plt.yscale("log")
 plt.title("Token usage histogram")
-plt.savefig('token_freq.png')
+name = "token_freq.png"
+if dosupervised:
+    name = "sup_"+name
+plt.savefig(name)
 
 print("\tNow token frequency Vs. label.")
 hist = torch.zeros(n_classes, myK)
@@ -613,7 +616,10 @@ plt.xlabel("Token ID")
 plt.ylabel("Frequency")
 plt.legend()
 plt.yscale("log")
-plt.savefig('token_freq_vs_class.png')
+name = "token_freq_vs_class.png"
+if dosupervised:
+    name = "sup_"+name
+plt.savefig(name)
 
 print("\tNow token <-> charge.")
 
@@ -633,7 +639,11 @@ plt.axhline(0, color="gray", linestyle="--")
 plt.xlabel("Token ID")
 plt.ylabel("Mean charge")
 plt.title("Token charge")
-plt.savefig('token_charge.png')
+name = "token_charge.png"
+if dosupervised:
+    name = "sup_"+name
+plt.savefig(name)
+
 
 # NB first feature is not momentum anymore!
 #print("Now token <-> momentum scale.")
@@ -673,7 +683,12 @@ plt.xlabel("Token ID")
 plt.ylabel("Frequency")
 plt.legend()
 plt.title("Token stability vs jet momentum")
-plt.savefig('token_stability_jet_p.png')
+name = "token_stability_jet_p.png"
+if dosupervised:
+    name = "sup_"+name
+plt.savefig(name)
+
+
 
 # Token entropy - entropy ~ log(K) -> full usage, entropy <<  log(K) -> collapse
 entropy = -(freq * torch.log(freq + 1e-8)).sum()
