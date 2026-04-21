@@ -12,10 +12,10 @@ val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
 IO_BATCH = 4096     # efficient disk read
 TRAIN_BATCH = 256   # good for VQ-VAE
 #n_epochs=1
-#n_epochs=15
-n_epochs=10
+n_epochs=15
+#n_epochs=10
 # SUPERVISED VQ-VAE?
-dosupervised=True
+dosupervised=False#True
 cls_lambda=0.5
 if not dosupervised:
     cls_lambda=0
@@ -555,11 +555,13 @@ print("\tNow token frequency.")
 all_tokens = []
 all_features = []
 all_jet_pt = []
+all_labels = []
 
 with torch.no_grad():
     for x, mask, jet_pt, labels in val_loader:
         x = x.cuda()
         mask = mask.cuda()
+        labels = labels.cuda()
     
         z = model_best_val_loss.encoder(x)
         z_real = z[mask.bool()]
@@ -570,10 +572,14 @@ with torch.no_grad():
         all_features.append(x[mask.bool()].cpu())
         ncounts = (mask.sum(dim=1).long()).cpu()
         all_jet_pt.append(jet_pt.repeat_interleave(ncounts).cpu())
+        # repeat labels per particle
+        labels_rep = labels.unsqueeze(1).expand_as(mask)
+        all_labels.append(labels_rep[mask.bool()].cpu())
 
 tokens = torch.cat(all_tokens)       # [N_pf_total]
 features = torch.cat(all_features)   # [N_pf_total, F]
 jet_pt_pf = torch.cat(all_jet_pt)    # [N_pf_total]
+labels = torch.cat(all_labels)
 
 import matplotlib.pyplot as plt
 
@@ -589,6 +595,25 @@ plt.ylabel("Frequency")
 plt.yscale("log")
 plt.title("Token usage histogram")
 plt.savefig('token_freq.png')
+
+print("\tNow token frequency Vs. label.")
+hist = torch.zeros(n_classes, myK)
+
+for c in range(n_classes):
+    mymask = (all_labels == c)
+    tokens_c = all_tokens[mymask]
+
+    counts = torch.bincount(tokens_c, minlength=myK).float()
+    hist[c] = counts / counts.sum()   # normalize
+
+for c in range(n_classes):
+    plt.plot(hist[c].numpy(), label=f"class {c}")
+
+plt.xlabel("Token ID")
+plt.ylabel("Frequency")
+plt.legend()
+plt.yscale("log")
+plt.savefig('token_freq_vs_class.png')
 
 print("\tNow token <-> charge.")
 
@@ -714,7 +739,7 @@ LABELS = torch.cat(all_labels)
 #Save
 name = input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_tokenized_dataset.pt"
 if dosupervised:
-    name = "sup_"+name
+    name = input_data_dir+"sup_"+"K"+str(myK)+"_D"+str(myD)+"_tokenized_dataset.pt"
 torch.save({
     "tokens": TOKENS,
     "mask": MASKS,
@@ -755,7 +780,7 @@ LABELS = torch.cat(all_labels)
 #Save
 name = input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_val_tokenized_dataset.pt"
 if dosupervised:
-    name = "sup_"+name
+    name = input_data_dir+"sup_"+"K"+str(myK)+"_D"+str(myD)+"_val_tokenized_dataset.pt"
 torch.save({
     "tokens": TOKENS,
     "mask": MASKS,
