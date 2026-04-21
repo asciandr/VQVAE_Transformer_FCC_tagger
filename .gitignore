@@ -3,3 +3,6 @@
 OLDSTUFF/
 __pycache__
 *log*
+condor/*.out
+condor/*.err
+condor/*.log
