@@ -14,6 +14,12 @@ TRAIN_BATCH = 256   # good for VQ-VAE
 #n_epochs=1
 #n_epochs=15
 n_epochs=10
+# SUPERVISED VQ-VAE?
+dosupervised=True
+cls_lambda=0.5
+if not dosupervised:
+    cls_lambda=0
+n_classes=7
 # Early stopping
 vqvae_patience=5
 vqvae_epochs_no_improve=0
@@ -330,6 +336,9 @@ class JetVQVAE(nn.Module):
 
         self.vq = VectorQuantizerEMA(K, D)
 
+        # supervised VQ-VAE?
+        self.classifier = nn.Linear(D, n_classes)
+
         self.decoder = nn.Sequential(
             nn.Linear(D, 64),
             nn.GELU(),
@@ -348,7 +357,12 @@ class JetVQVAE(nn.Module):
         num_valid = mask.sum() * N_FEAT
         rec_loss = ((x_rec - x)**2 * mask.unsqueeze(-1)).sum() / num_valid
 
-        return x_rec, tokens, rec_loss + vq_loss
+        # supervised VQ-VAE?
+        # pooling
+        z_pool = (z_q * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
+        logits = self.classifier(z_pool)
+
+        return x_rec, tokens, rec_loss, vq_loss, logits
 
 print("==> Defining model.")
 model = JetVQVAE().cuda()
@@ -380,6 +394,8 @@ model_best_val_loss = model
 
 print("==> Starting VQ-VAE training loop.")
 best_model_name="K"+str(myK)+"_D"+str(myD)+"_JetVQVAE_best.pt"
+if dosupervised:
+    best_model_name="sup_"+best_model_name
 for epoch in range(n_epochs):
 
     # ---- TRAINING ----
@@ -391,12 +407,14 @@ for epoch in range(n_epochs):
         # move entire macro-batch to GPU once
         X_big = X_big.cuda(non_blocking=True)
         M_big = M_big.cuda(non_blocking=True)
+        labels_big = labels_big.cuda(non_blocking=True)
         # get rid of empty entries
         # NB NOT an issue with data, but h5 reprocessing
         # where the total n. of jets did not come from tree.entries!
         valid = M_big.sum(dim=1) > 0
         X_big = X_big[valid]
         M_big = M_big[valid]
+        labels_big = labels_big[valid]
         # debugging
         #if epoch==0:
         #    print("train labels:", labels_big)
@@ -406,12 +424,14 @@ for epoch in range(n_epochs):
         perm = torch.randperm(X_big.size(0))
         X_big = X_big[perm]
         M_big = M_big[perm]
+        labels_big = labels_big[perm]
 
         # split into micro-batches
         for i in range(0, X_big.size(0), TRAIN_BATCH):
 
             x = X_big[i:i+TRAIN_BATCH]
             mask = M_big[i:i+TRAIN_BATCH]
+            labels = labels_big[i:i+TRAIN_BATCH] 
             # skip empty batches 
             if mask.sum().item() == 0:
                 print("WARNING: empty batches, shouldn't have jets with 0 constituents?!")
@@ -428,7 +448,10 @@ for epoch in range(n_epochs):
                 print("NaNs in MASK!")
                 exit()
 
-            _, tokens, loss = model(x, mask)
+            _, tokens, rec_loss, vq_loss, logits = model(x, mask)
+            cls_loss = FNC.cross_entropy(logits, labels)
+            loss = rec_loss + vq_loss + cls_lambda * cls_loss
+
             loss.backward()
             opt.step()
 
@@ -458,6 +481,7 @@ for epoch in range(n_epochs):
             # move entire macro-batch to GPU once
             X_big = X_big.cuda(non_blocking=True)
             M_big = M_big.cuda(non_blocking=True)
+            labels_big = labels_big.cuda(non_blocking=True)
             # debugging
             #if epoch==0:
             #    print("val labels:", labels_big)
@@ -470,8 +494,11 @@ for epoch in range(n_epochs):
 
                 x = X_big[i:i+TRAIN_BATCH]
                 mask = M_big[i:i+TRAIN_BATCH]
+                labels = labels_big[i:i+TRAIN_BATCH]
 
-                _, tokens, loss = model(x, mask)
+                _, tokens, rec_loss, vq_loss, logits = model(x, mask)
+                cls_loss = FNC.cross_entropy(logits, labels)
+                loss = rec_loss + vq_loss + cls_lambda * cls_loss
 
                 val_loss += loss.item()
                 n_val_steps += 1
@@ -497,6 +524,8 @@ for epoch in range(n_epochs):
 
 print("==> Save last model too.")
 last_model_name="K"+str(myK)+"_D"+str(myD)+"_JetVQVAE_last.pt"
+if dosupervised:
+    last_model_name="sup_"+last_model_name
 torch.save(model.state_dict(), last_model_name)
 
 # evaluation and sanity checks
@@ -665,11 +694,14 @@ MASKS  = torch.cat(all_masks)
 LABELS = torch.cat(all_labels)
 
 #Save
+name = input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_tokenized_dataset.pt"
+if dosupervised:
+    name = "sup_"+name
 torch.save({
     "tokens": TOKENS,
     "mask": MASKS,
     "labels": LABELS
-}, input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_tokenized_dataset.pt")
+}, name )
 
 print("\tVal dataset")
 all_tokens = []
@@ -703,10 +735,13 @@ MASKS  = torch.cat(all_masks)
 LABELS = torch.cat(all_labels)
 
 #Save
+name = input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_val_tokenized_dataset.pt"
+if dosupervised:
+    name = "sup_"+name
 torch.save({
     "tokens": TOKENS,
     "mask": MASKS,
     "labels": LABELS
-}, input_data_dir+"K"+str(myK)+"_D"+str(myD)+"_val_tokenized_dataset.pt")
+}, name )
 
 
