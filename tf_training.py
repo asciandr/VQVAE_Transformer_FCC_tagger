@@ -9,7 +9,7 @@ process = psutil.Process(os.getpid())
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
 n_classes=7
 # training of Transformer-based classifier
-m_epochs=20
+m_epochs=100
 # Early stopping
 patience = 5
 epochs_no_improve = 0

@@ -209,7 +209,44 @@ print("\t", top_tokens)
 ### Extract PF features assigned to top-ranked token
 ##selected_token = top_tokens[0]
 ##
-##features_list = []
+##features_list = 
+##    [
+##	    "pfcand_erel_log",
+##	    "pfcand_thetarel",
+##	    "pfcand_phirel",
+##	    "pfcand_dptdpt",
+##	    "pfcand_detadeta",
+##	    "pfcand_dphidphi",
+##	    "pfcand_dxydxy",
+##	    "pfcand_dzdz",
+##	    "pfcand_dxydz",
+##	    "pfcand_charge",
+##	    "pfcand_dphidxy",
+##	    "pfcand_dlambdadz",
+##	    "pfcand_dxyc",
+##	    "pfcand_dxyctgtheta",
+##	    "pfcand_phic",
+##	    "pfcand_phidz",
+##	    "pfcand_phictgtheta",
+##	    "pfcand_cdz",
+##	    "pfcand_cctgtheta",
+##	    "pfcand_mtof",
+##	    "pfcand_dndx",
+##	    "pfcand_isMu",
+##	    "pfcand_isEl",
+##	    "pfcand_isChargedHad",
+##	    "pfcand_isGamma",
+##	    "pfcand_isNeutralHad",
+##	    "pfcand_dxy",
+##	    "pfcand_dz",
+##	    "pfcand_btagSip2dVal",
+##	    "pfcand_btagSip2dSig",
+##	    "pfcand_btagSip3dVal",
+##	    "pfcand_btagSip3dSig",
+##	    "pfcand_btagJetDistVal",
+##	    "pfcand_btagJetDistSig",
+##	    "pfcand_type"
+##    ]
 ##
 ##with torch.no_grad():
 ##    for x, mask, _ in train_loader:  # PF features
@@ -230,7 +267,7 @@ print("\t", top_tokens)
 ##    plt.hist(features[:, i].numpy(), bins=50)
 ##    plt.title(f"Feature {i} for token {selected_token}")
 ##    plt.savefig("feature_token.png")
-##
+
 ### Transformer-level importance
 ### Gradient-based importance
 ##tokens = tokens.cuda()

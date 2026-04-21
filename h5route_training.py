@@ -15,7 +15,7 @@ TRAIN_BATCH = 256   # good for VQ-VAE
 #n_epochs=15
 n_epochs=10
 # Early stopping
-vqvae_patience=2
+vqvae_patience=5
 vqvae_epochs_no_improve=0
 # NB K=256 proves to saturate
 # codebook size efficiency
