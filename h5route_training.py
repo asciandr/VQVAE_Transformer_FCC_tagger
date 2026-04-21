@@ -263,7 +263,7 @@ import torch.nn as nn
 import torch.nn.functional as FNC
 
 class VectorQuantizerEMA(nn.Module):
-    def __init__(self, K, D, beta=0.5, decay=0.9, eps=1e-5):
+    def __init__(self, K, D, beta=0.5, decay=0.97, eps=1e-5):
         super().__init__()
         self.K = K
         self.D = D
@@ -337,7 +337,12 @@ class JetVQVAE(nn.Module):
         self.vq = VectorQuantizerEMA(K, D)
 
         # supervised VQ-VAE?
-        self.classifier = nn.Linear(D, n_classes)
+        self.classifier = nn.Sequential(
+                nn.Linear(D, D),
+                nn.GELU(),
+                nn.Dropout(0.3),
+                nn.Linear(D, n_classes)
+        )
 
         self.decoder = nn.Sequential(
             nn.Linear(D, 64),
@@ -390,7 +395,8 @@ print("\tDone with single-batch smoke test.")
 # best validation loss (may add entropy in the future?)
 # to define "best" model
 best_val_loss = float("inf")
-model_best_val_loss = model
+import copy
+model_best_val_loss = copy.deepcopy(model)
 
 print("==> Starting VQ-VAE training loop.")
 best_model_name="K"+str(myK)+"_D"+str(myD)+"_JetVQVAE_best.pt"
@@ -449,8 +455,14 @@ for epoch in range(n_epochs):
                 exit()
 
             _, tokens, rec_loss, vq_loss, logits = model(x, mask)
-            cls_loss = FNC.cross_entropy(logits, labels)
+            # add label smoothing not to let classifier get "too confident"
+            cls_loss = FNC.cross_entropy(logits, labels, label_smoothing=0.1)
             loss = rec_loss + vq_loss + cls_lambda * cls_loss
+            # debugging
+            #print("TRAIN rec:", rec_loss.item(),
+            #"vq:", vq_loss.item(),
+            #"cls:", cls_loss.item())
+            #print("TRAIN loss:", loss.item())
 
             loss.backward()
             opt.step()
@@ -497,8 +509,14 @@ for epoch in range(n_epochs):
                 labels = labels_big[i:i+TRAIN_BATCH]
 
                 _, tokens, rec_loss, vq_loss, logits = model(x, mask)
-                cls_loss = FNC.cross_entropy(logits, labels)
+                # add label smoothing not to let classifier get "too confident"
+                cls_loss = FNC.cross_entropy(logits, labels, label_smoothing=0.1)
                 loss = rec_loss + vq_loss + cls_lambda * cls_loss
+                # debugging
+                #print("VAL rec:", rec_loss.item(),
+                #"vq:", vq_loss.item(),
+                #"cls:", cls_loss.item())
+                #print("VAL loss:", loss.item())
 
                 val_loss += loss.item()
                 n_val_steps += 1
@@ -509,7 +527,7 @@ for epoch in range(n_epochs):
     if val_loss < best_val_loss:
         best_val_loss = val_loss
         torch.save(model.state_dict(), best_model_name)
-        model_best_val_loss = model
+        model_best_val_loss = copy.deepcopy(model)
         print("  → Saved new best model")
         vqvae_epochs_no_improve = 0 
     else:
@@ -662,7 +680,7 @@ all_labels = []
 
 # at this point no need for "last" model,
 # just use "best" model for transformer
-model = model_best_val_loss
+model = copy.deepcopy(model_best_val_loss)
 model.eval()
 
 print("\tTrain dataset")
