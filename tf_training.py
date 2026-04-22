@@ -20,7 +20,8 @@ min_delta = 1e-4
 #K=256
 K=512
 # VQ-VAE config
-vqvaeconfig="K512_D64"#"K512_D128"
+vqvaeconfig="sup_K512_D128"#"sup_K512_D64"#"K512_D64"#"K512_D128"
+N_FEAT=35
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
@@ -102,6 +103,9 @@ class JetTransformer(nn.Module):
         super().__init__()
 
         self.embedding = nn.Embedding(num_tokens, d_model)
+        # test continuous PF features
+        # as performance ceriling of pipeline
+        self.input_proj = nn.Linear(N_FEAT, d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -124,6 +128,7 @@ class JetTransformer(nn.Module):
             nn.Linear(d_model, num_classes)
         )
 
+    # standard token model
     def forward(self, tokens, mask):
         # tokens: [B, N]
         x = self.embedding(tokens)   # [B, N, d_model]
@@ -138,6 +143,24 @@ class JetTransformer(nn.Module):
 
         logits = self.classifier(x)
         return logits
+
+    # continuous model
+    # FIXME need x (continuous features) in dataset for this
+    #def forward(self, x, mask):
+    #    # test continuous PF features
+    #    # as performance ceriling of pipeline
+    #    x = self.input_proj(tokens)
+
+    #    # attention mask (True = ignore)
+    #    attn_mask = ~mask.bool()
+
+    #    x = self.transformer(x, src_key_padding_mask=attn_mask)
+
+    #    # masked mean pooling
+    #    x = (x * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
+
+    #    logits = self.classifier(x)
+    #    return logits
 
 # Add validation
 def evaluate(model, loader):

@@ -1,4 +1,5 @@
 import torch.nn as nn
+N_FEAT=35
 
 #Model definition
 class JetTransformer(nn.Module):
@@ -6,6 +7,9 @@ class JetTransformer(nn.Module):
         super().__init__()
 
         self.embedding = nn.Embedding(num_tokens, d_model)
+        # test continuous PF features
+        # as performance ceriling of pipeline
+        self.input_proj = nn.Linear(N_FEAT, d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,

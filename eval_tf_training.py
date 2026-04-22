@@ -8,15 +8,13 @@ process = psutil.Process(os.getpid())
 ### job handles ###
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
 n_classes=7
-# training of Transformer-based classifier
-m_epochs=20
 # number of PF features
 #K=64
 #K=128
 #K=256
 K=512
 # VQ-VAE config
-vqvaeconfig="K512_D128"
+vqvaeconfig="K512_D64"#"sup_K512_D128"#"sup_K512_D64"#"K512_D64"
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
