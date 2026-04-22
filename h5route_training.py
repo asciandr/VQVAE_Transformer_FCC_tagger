@@ -12,8 +12,9 @@ val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
 IO_BATCH = 4096     # efficient disk read
 TRAIN_BATCH = 256   # good for VQ-VAE
 #n_epochs=1
-n_epochs=15
 #n_epochs=10
+n_epochs=15
+#n_epochs=50
 # SUPERVISED VQ-VAE?
 dosupervised=False#True
 cls_lambda=0.5
@@ -22,11 +23,12 @@ if not dosupervised:
 n_classes=7
 # Early stopping
 vqvae_patience=5
+# initialize early stopping counter
 vqvae_epochs_no_improve=0
 # NB K=256 proves to saturate
 # codebook size efficiency
 # latent space dimension
-myD=64#16
+myD=128#64#16
 # codebook size
 myK=512#128
 # number of PF features
