@@ -3,6 +3,7 @@
 ### job handles ###
 # input datasets
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
+# TEST ON x8 SMALLER DATASET
 #input_data_dir="/gpfs01/usfcc/asciandra/tokenization/TEST/"
 train_file  = "prealloc_fcc_ee_7classes_35features_5_6Mjets_pf.h5"
 val_file    = "val_prealloc_fcc_ee_7classes_35features_700kjets_pf.h5"
@@ -16,8 +17,8 @@ TRAIN_BATCH = 256   # good for VQ-VAE
 n_epochs=15
 #n_epochs=50
 # SUPERVISED VQ-VAE?
-dosupervised=False#True
-cls_lambda=0.5
+dosupervised=True
+cls_lambda=0.05
 if not dosupervised:
     cls_lambda=0
 n_classes=7
@@ -28,9 +29,9 @@ vqvae_epochs_no_improve=0
 # NB K=256 proves to saturate
 # codebook size efficiency
 # latent space dimension
-myD=128#64#16
+myD=64#128#256#128#64#16
 # codebook size
-myK=512#128
+myK=256#1024#512#128
 # number of PF features
 N_FEAT=35
 # want to use already standardized
@@ -265,7 +266,7 @@ import torch.nn as nn
 import torch.nn.functional as FNC
 
 class VectorQuantizerEMA(nn.Module):
-    def __init__(self, K, D, beta=0.5, decay=0.97, eps=1e-5):
+    def __init__(self, K, D, beta=0.5, decay=0.99, eps=1e-5):
         super().__init__()
         self.K = K
         self.D = D
@@ -321,31 +322,53 @@ class JetVQVAE(nn.Module):
     def __init__(self, D=myD, K=myK):
         super().__init__()
 
-        self.encoder = nn.Sequential(
-            nn.Linear(N_FEAT, 64),
-            nn.GELU(),
-            # add encoder regularization
-            nn.Dropout(0.1),
+        # -------------------------
+        # INPUT PROJECTION
+        # -------------------------
+        self.input_proj = nn.Linear(N_FEAT, D)
 
-            nn.Linear(64, 64),
-            nn.GELU(),
-            # add encoder regularization
-            nn.Dropout(0.1),
-
-            nn.Linear(64, D),
-            nn.LayerNorm(D),
+        # -------------------------
+        # SELF-ATTENTION BLOCK
+        # -------------------------
+        self.attn = nn.MultiheadAttention(
+            embed_dim=D,
+            num_heads=4,
+            batch_first=True,
+            dropout=0.1
         )
 
+        self.norm1 = nn.LayerNorm(D)
+
+        # -------------------------
+        # FEEDFORWARD (like before, but in D space)
+        # -------------------------
+        self.ffn = nn.Sequential(
+            nn.Linear(D, D),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(D, D),
+        )
+
+        self.norm2 = nn.LayerNorm(D)
+
+        # -------------------------
+        # VQ
+        # -------------------------
         self.vq = VectorQuantizerEMA(K, D)
 
-        # supervised VQ-VAE?
+        # -------------------------
+        # CLASSIFIER (unchanged)
+        # -------------------------
         self.classifier = nn.Sequential(
-                nn.Linear(D, D),
-                nn.GELU(),
-                nn.Dropout(0.3),
-                nn.Linear(D, n_classes)
+            nn.Linear(D, D),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.Linear(D, n_classes)
         )
 
+        # -------------------------
+        # DECODER (unchanged)
+        # -------------------------
         self.decoder = nn.Sequential(
             nn.Linear(D, 64),
             nn.GELU(),
@@ -354,10 +377,44 @@ class JetVQVAE(nn.Module):
             nn.Linear(64, N_FEAT),
         )
 
+    # -------------------------
+    # ENCODER (NEW)
+    # -------------------------
+    def encode(self, x, mask):
+        # x: [B, N, F]
+        x = self.input_proj(x)  # → [B, N, D]
+
+        # mask: 1 = valid, 0 = padding
+        key_padding_mask = (mask == 0)
+
+        # attention
+        x_attn, _ = self.attn(
+            x, x, x,
+            key_padding_mask=key_padding_mask
+        )
+
+        # residual + norm
+        x = self.norm1(x + x_attn)
+
+        # FFN
+        x_ffn = self.ffn(x)
+
+        # residual + norm
+        x = self.norm2(x + x_ffn)
+
+        return x
+
+    # -------------------------
+    # FORWARD
+    # -------------------------
     def forward(self, x, mask):
-        # x: [B, N, N_FEAT], mask: [B, N]
-        z = self.encoder(x)
+        # --- ENCODER ---
+        z = self.encode(x, mask)
+
+        # --- VQ ---
         z_q, tokens, vq_loss = self.vq(z)
+
+        # --- DECODER ---
         x_rec = self.decoder(z_q)
 
         # masked reconstruction loss
@@ -366,10 +423,13 @@ class JetVQVAE(nn.Module):
 
         # supervised VQ-VAE?
         # pooling
-        z_pool = (z_q * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
-        logits = self.classifier(z_pool)
+        #z_pool = (z_q * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
+        # detach classifier: decouple the classifier from the encoder
+        #logits = self.classifier(z_pool.detach())
+        # move supervision BEFORE pooling
+        logits_pf = self.classifier(z_q)   # [B, N, n_classes]
 
-        return x_rec, tokens, rec_loss, vq_loss, logits
+        return x_rec, tokens, rec_loss, vq_loss, logits_pf
 
 print("==> Defining model.")
 model = JetVQVAE().cuda()
@@ -400,6 +460,7 @@ best_val_loss = float("inf")
 import copy
 model_best_val_loss = copy.deepcopy(model)
 
+import numpy as np
 print("==> Starting VQ-VAE training loop.")
 best_model_name="K"+str(myK)+"_D"+str(myD)+"_JetVQVAE_best.pt"
 if dosupervised:
@@ -434,6 +495,12 @@ for epoch in range(n_epochs):
         M_big = M_big[perm]
         labels_big = labels_big[perm]
 
+        # delayed + weak supervision
+        #if epoch < 2:
+        #    cls_lambda = 0
+        #else:
+        #    cls_lambda = 0.01
+
         # split into micro-batches
         for i in range(0, X_big.size(0), TRAIN_BATCH):
 
@@ -458,8 +525,18 @@ for epoch in range(n_epochs):
 
             _, tokens, rec_loss, vq_loss, logits = model(x, mask)
             # add label smoothing not to let classifier get "too confident"
-            cls_loss = FNC.cross_entropy(logits, labels, label_smoothing=0.1)
-            loss = rec_loss + vq_loss + cls_lambda * cls_loss
+            #cls_loss = FNC.cross_entropy(logits, labels, label_smoothing=0.1)
+            cls_loss = FNC.cross_entropy(
+                logits[mask.bool()],
+                labels.unsqueeze(1).expand_as(mask)[mask.bool()]
+            )
+            # normalize loss scales
+            #loss = rec_loss + vq_loss + cls_lambda * cls_loss
+            loss = (
+                rec_loss
+                + vq_loss
+                + cls_lambda * cls_loss / np.log(n_classes)
+            )
             # debugging
             #print("TRAIN rec:", rec_loss.item(),
             #"vq:", vq_loss.item(),
@@ -512,8 +589,19 @@ for epoch in range(n_epochs):
 
                 _, tokens, rec_loss, vq_loss, logits = model(x, mask)
                 # add label smoothing not to let classifier get "too confident"
-                cls_loss = FNC.cross_entropy(logits, labels, label_smoothing=0.1)
-                loss = rec_loss + vq_loss + cls_lambda * cls_loss
+                #cls_loss = FNC.cross_entropy(logits, labels, label_smoothing=0.1)
+                cls_loss = FNC.cross_entropy(
+                    logits[mask.bool()],
+                    labels.unsqueeze(1).expand_as(mask)[mask.bool()]
+                )
+                # normalize loss scales
+                #loss = rec_loss + vq_loss + cls_lambda * cls_loss
+                loss = (
+                    rec_loss
+                    + vq_loss
+                    + cls_lambda * cls_loss / np.log(n_classes)
+                )
+
                 # debugging
                 #print("VAL rec:", rec_loss.item(),
                 #"vq:", vq_loss.item(),
@@ -564,24 +652,30 @@ with torch.no_grad():
         x = x.cuda()
         mask = mask.cuda()
         labels = labels.cuda()
-    
-        z = model_best_val_loss.encoder(x)
-        z_real = z[mask.bool()]
-    
-        _, tokens, _ = model_best_val_loss.vq(z_real)
-    
-        all_tokens.append(tokens.cpu())
-        all_features.append(x[mask.bool()].cpu())
-        ncounts = (mask.sum(dim=1).long()).cpu()
-        all_jet_pt.append(jet_pt.repeat_interleave(ncounts).cpu())
-        # repeat labels per particle
+        jet_pt = jet_pt.cuda()
+
+        # FULL forward pass (important!)
+        _, tokens, _, _, _ = model_best_val_loss(x, mask)
+
+        # flatten valid PFs
+        tokens_flat = tokens[mask.bool()]
+        features_flat = x[mask.bool()]
+
+        all_tokens.append(tokens_flat.cpu())
+        all_features.append(features_flat.cpu())
+
+        # jet pt per PF
+        ncounts = mask.sum(dim=1).long().cuda()
+        all_jet_pt.append(jet_pt.repeat_interleave(ncounts))
+
+        # labels per PF
         labels_rep = labels.unsqueeze(1).expand_as(mask)
         all_labels.append(labels_rep[mask.bool()].cpu())
 
-tokens = torch.cat(all_tokens)       # [N_pf_total]
-features = torch.cat(all_features)   # [N_pf_total, F]
-jet_pt_pf = torch.cat(all_jet_pt)    # [N_pf_total]
-labels = torch.cat(all_labels)
+tokens   = torch.cat(all_tokens)
+features = torch.cat(all_features)
+jet_pt_pf = torch.cat(all_jet_pt)
+labels   = torch.cat(all_labels)
 
 import matplotlib.pyplot as plt
 
@@ -611,17 +705,26 @@ for c in range(n_classes):
     counts = torch.bincount(tokens_c, minlength=myK).float()
     hist[c] = counts / counts.sum()   # normalize
 
+x = np.arange(myK)
+bottom = np.zeros(myK)
+
+plt.figure(figsize=(10, 6))
+
 for c in range(n_classes):
-    plt.plot(hist[c].numpy(), label=f"class {c}")
+    values = hist[c].numpy()
+    plt.bar(x, values, bottom=bottom, label=f"class {c}")
+    bottom += values
 
 plt.xlabel("Token ID")
-plt.ylabel("Frequency")
+plt.ylabel("Stacked frequency")
 plt.legend()
-plt.yscale("log")
-name = "token_freq_vs_class.png"
+plt.tight_layout()
+name = "token_freqVsClass.png"
 if dosupervised:
     name = "sup_"+name
 plt.savefig(name)
+
+
 
 print("\tNow token <-> charge.")
 
@@ -670,7 +773,7 @@ plt.savefig(name)
 print("\tNow token frequency per jet energy bin.")
 freq_per_bin = {}
 bins = torch.tensor([0, 5, 10, 15, 20, 30, 40, 50])  # GeV
-bin_ids = torch.bucketize(jet_pt_pf, bins)
+bin_ids = torch.bucketize(jet_pt_pf.cpu(), bins)
 
 for b in bin_ids.unique():
     sel = bin_ids == b
@@ -703,16 +806,12 @@ print("==> Max entropy:", torch.log(torch.tensor(K)).item())
 
 #Tokenization function
 def tokenize_batch(model, x, mask):
+    model.eval()
     with torch.no_grad():
-        z = model.encoder(x)
-        z_real = z[mask.bool()]
-        _, tokens, _ = model.vq(z_real)
+        # full forward pass (critical!)
+        _, tokens, _, _, _ = model(x, mask)
 
-        # rebuild padded token tensor
-        token_tensor = torch.zeros_like(mask, dtype=torch.long)
-        token_tensor[mask.bool()] = tokens
-
-    return token_tensor
+    return tokens
 
 #Build token dataset (offline step)
 print("==> Build token dataset.")

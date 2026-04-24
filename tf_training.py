@@ -23,7 +23,7 @@ K=256
 vqvaeconfig="selfAttention_decay099_sup_detachedClassifier_lambda001_K256_D64"#"sup_K512_D128"#"sup_K512_D64"#"K512_D64"#"K512_D128"
 N_FEAT=35
 # RANDOMIZED TOKENS CHECK?
-dorandomtokens=True#False
+dorandomtokens=False#True
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
