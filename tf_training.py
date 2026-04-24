@@ -17,11 +17,13 @@ min_delta = 1e-4
 # codebook size
 #K=64
 #K=128
-#K=256
-K=512
+K=256
+#K=512
 # VQ-VAE config
-vqvaeconfig="sup_K512_D128"#"sup_K512_D64"#"K512_D64"#"K512_D128"
+vqvaeconfig="selfAttention_decay099_sup_detachedClassifier_lambda001_K256_D64"#"sup_K512_D128"#"sup_K512_D64"#"K512_D64"#"K512_D128"
 N_FEAT=35
+# RANDOMIZED TOKENS CHECK?
+dorandomtokens=True#False
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
@@ -172,6 +174,9 @@ def evaluate(model, loader):
             tokens = tokens.cuda()
             mask   = mask.cuda()
             labels = labels.cuda()
+            # RANDOMIZE CHECK -> take tokens & destroy structure
+            if dorandomtokens:
+                tokens = tokens[torch.randperm(tokens.size(0))]
 
             logits = model(tokens, mask)
             loss = criterion(logits, labels)
@@ -208,6 +213,9 @@ for epoch in range(m_epochs):
         tokens = tokens.cuda(non_blocking=True)
         mask = mask.cuda(non_blocking=True)
         labels = labels.cuda(non_blocking=True)
+        # RANDOMIZE CHECK -> take tokens & destroy structure
+        if dorandomtokens:
+            tokens = tokens[torch.randperm(tokens.size(0))]
 
         optimizer.zero_grad()
 

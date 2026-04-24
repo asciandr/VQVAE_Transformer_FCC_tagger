@@ -11,10 +11,10 @@ n_classes=7
 # number of PF features
 #K=64
 #K=128
-#K=256
-K=512
+K=256
+#K=512
 # VQ-VAE config
-vqvaeconfig="K512_D64"#"sup_K512_D128"#"sup_K512_D64"#"K512_D64"
+vqvaeconfig="selfAttention_decay099_sup_detachedClassifier_lambda001_K256_D64"#"sup_K512_D128"#"sup_K512_D64"#"K512_D64"
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
@@ -82,7 +82,7 @@ val_loader = DataLoader(
 print("==> Retrieving TF model.")
 from tf_model import JetTransformer
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
-tf_model.load_state_dict(torch.load(vqvaeconfig+"_best_tf.pt"))
+tf_model.load_state_dict(torch.load("tf_models/"+vqvaeconfig+"_best_tf.pt"))
 
 all_logits = []
 all_labels = []
