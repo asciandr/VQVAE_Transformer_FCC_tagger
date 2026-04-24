@@ -1,0 +1,17 @@
+Executable = /usatlas/u/asciandra/tokenization/code/condor/continuous_tf_run_1GPU.sh
+Universe = vanilla
+Notification = never
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+Output = /usatlas/u/asciandra/tokenization/code/condor/continuous_tf_condor.out
+Error  = /usatlas/u/asciandra/tokenization/code/condor/continuous_tf_condor.err
+Log    = /usatlas/u/asciandra/tokenization/code/condor/continuous_tf_condor.log
+stream_output  = True
+stream_error   = True
+transfer_input_files =
+accounting_group    = group_usfcc
++JobFlavour  = "nextweek"
+request_GPUs = 1
+request_memory = 48GB
+Queue
