@@ -6,11 +6,18 @@ Jets are represented as sets of particle-flow constituents and encoded using a l
 ```
 source /cvmfs/sw.hsf.org/key4hep/releases/2023-06-05-fcchh/x86_64-centos7-gcc12.2.0-opt/key4hep-stack/*/setup.sh
 ulimit -s unlimited
-python3 process_data.py
+# NB pt here works for "small" datasets, 
+# workflow for >~1M jets in h5py
+###python3 process_data.py
+python3 h5route_process_data.py
 singularity shell -B /gpfs01/ --nv /usatlas/u/asciandra/colorsinglet.sif
+pip install --user h5py
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 # Run VQ-VAE training
-python3 training.py
+# NB pt here works for "small" datasets, 
+# workflow for >~1M jets in h5py
+### python3 training.py
+python3 h5route_training.py
 # Use tokenized dataset from it
 # to run transformer training
 python3 tf_training.py

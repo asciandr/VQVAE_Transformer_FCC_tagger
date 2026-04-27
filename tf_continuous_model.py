@@ -32,9 +32,13 @@ class JetTransformer(nn.Module):
             nn.Linear(d_model, num_classes)
         )
 
-    def forward(self, tokens, mask):
+    # standard token model
+    def forward(self, x, mask):
         # tokens: [B, N]
-        x = self.embedding(tokens)   # [B, N, d_model]
+        #x = self.embedding(tokens)   # [B, N, d_model]
+        # x: [B, N, F]
+        # mask: [B, N]
+        x = self.input_proj(x)   # linear F → d_model
 
         # attention mask (True = ignore)
         attn_mask = ~mask.bool()
@@ -46,5 +50,23 @@ class JetTransformer(nn.Module):
 
         logits = self.classifier(x)
         return logits
+
+    # continuous model
+    # FIXME need x (continuous features) in dataset for this
+    #def forward(self, x, mask):
+    #    # test continuous PF features
+    #    # as performance ceriling of pipeline
+    #    x = self.input_proj(tokens)
+
+    #    # attention mask (True = ignore)
+    #    attn_mask = ~mask.bool()
+
+    #    x = self.transformer(x, src_key_padding_mask=attn_mask)
+
+    #    # masked mean pooling
+    #    x = (x * mask.unsqueeze(-1)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
+
+    #    logits = self.classifier(x)
+    #    return logits
 
 

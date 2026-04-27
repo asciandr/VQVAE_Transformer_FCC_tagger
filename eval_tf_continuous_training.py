@@ -6,6 +6,7 @@ import psutil, os
 process = psutil.Process(os.getpid())
 
 ### job handles ###
+IO_BATCH = 4096
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
 n_classes=7
 # number of PF features
@@ -20,6 +21,35 @@ vqvaeconfig="selfAttention_decay099_sup_detachedClassifier_lambda001_K256_D64"#"
 #### STEP 1: LOAD TOKENIZED DATASETS ####
 #########################################
 
+import h5py
+# Dataset class
+class H5JetDataset(torch.utils.data.Dataset):
+    def __init__(self, file_path, io_batch_size):
+        self.file = h5py.File(file_path, "r")
+
+        self.X = self.file["X"]
+        self.mask = self.file["mask"]
+        self.jet_pt = self.file["jet_pt"]
+        self.labels = self.file["labels"]
+
+        self.io_batch_size = io_batch_size
+        self.N = self.X.shape[0]
+
+    def __len__(self):
+        return self.N // self.io_batch_size
+
+    def __getitem__(self, idx):
+        start = idx * self.io_batch_size
+        end = start + self.io_batch_size
+
+        return (
+            torch.from_numpy(self.X[start:end]),
+            torch.from_numpy(self.mask[start:end]),
+            torch.from_numpy(self.jet_pt[start:end]),
+            torch.from_numpy(self.labels[start:end])
+        )
+
+
 #load data
 print("==> Loading the dataset.")
 # set how tensors are shared between processes (DataLoader workers) 
@@ -30,30 +60,38 @@ print("==> Loading the dataset.")
 torch.set_num_threads(1)
 
 #Load
-data = torch.load(input_data_dir+vqvaeconfig+"_val_tokenized_dataset.pt", map_location="cpu")
-#data = torch.load(input_data_dir+vqvaeconfig+"_tokenized_dataset.pt", map_location="cpu")
-TOKENS = data["tokens"]
-MASKS  = data["mask"]
-LABELS = data["labels"]
-from torch.utils.data import Dataset
-class TokenDataset(Dataset):
-    def __init__(self, tokens, mask, labels):
-        self.tokens = tokens
-        self.mask = mask
-        self.labels = labels
+dataset     = H5JetDataset(input_data_dir + "val_standardized.h5",    io_batch_size=IO_BATCH)
+loader = torch.utils.data.DataLoader(
+    dataset,
+    batch_size=None,   # IMPORTANT
+    shuffle=False,
+    pin_memory=True,
+    num_workers=0      # IMPORTANT
+)
 
-    def __len__(self):
-        return len(self.labels)
 
-    def __getitem__(self, idx):
-        return (
-            self.tokens[idx],
-            self.mask[idx],
-            self.labels[idx]
-        )
+#TOKENS = data["tokens"]
+#MASKS  = data["mask"]
+#LABELS = data["labels"]
+#from torch.utils.data import Dataset
+#class TokenDataset(Dataset):
+#    def __init__(self, tokens, mask, labels):
+#        self.tokens = tokens
+#        self.mask = mask
+#        self.labels = labels
+#
+#    def __len__(self):
+#        return len(self.labels)
+#
+#    def __getitem__(self, idx):
+#        return (
+#            self.tokens[idx],
+#            self.mask[idx],
+#            self.labels[idx]
+#        )
 from torch.utils.data import random_split
 
-dataset = TokenDataset(TOKENS, MASKS, LABELS)
+#dataset = TokenDataset(TOKENS, MASKS, LABELS)
 
 n_total = len(dataset)
 n_train = int(0.99999 * n_total)
@@ -64,7 +102,7 @@ from torch.utils.data import DataLoader
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=64,
+    batch_size=None,
     shuffle=True,
     num_workers=0,      # keep this
     pin_memory=False
@@ -72,7 +110,7 @@ train_loader = DataLoader(
 
 val_loader = DataLoader(
     val_dataset,
-    batch_size=64,
+    batch_size=None,
     shuffle=False,
     num_workers=0,
     pin_memory=False
@@ -80,9 +118,9 @@ val_loader = DataLoader(
 
 # Retrieve transformer model
 print("==> Retrieving TF model.")
-from tf_model import JetTransformer
+from tf_continuous_model import JetTransformer
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
-tf_model.load_state_dict(torch.load("tf_models/"+vqvaeconfig+"_best_tf.pt"))
+tf_model.load_state_dict(torch.load(vqvaeconfig+"_best_tf.pt"))
 
 all_logits = []
 all_labels = []
@@ -92,12 +130,12 @@ def evaluate_perf(model, loader):
     total_loss = 0.0
 
     with torch.no_grad():
-        for tokens, mask, labels in loader:
-            tokens = tokens.cuda()
+        for x, mask, jet_pt, labels in loader:
+            x = x.cuda()
             mask   = mask.cuda()
             labels = labels.cuda()
 
-            logits = model(tokens, mask)
+            logits = model(x, mask)
             all_logits.append(logits.cpu())
             all_labels.append(labels)
     return torch.cat(all_logits),torch.cat(all_labels)
@@ -154,54 +192,54 @@ for c in range(n_classes):  # signal class
     plt.close()
 
 # compute token freq vs. class
-token_counts = torch.zeros(n_classes, K)
-
-for tokens, mask, labels in train_loader:
-    for c in range(n_classes):
-        mask_c = (labels == c)
-
-        if mask_c.sum() == 0:
-            continue
-
-        t = tokens[mask_c]           # [Nc, N]
-        m = mask[mask_c]
-
-        t = t[m.bool()]              # flatten valid tokens
-        counts = torch.bincount(t, minlength=K)
-
-        token_counts[c] += counts
-
-# Normalize ->  probability
-token_probs = token_counts / token_counts.sum(dim=1, keepdim=True)
-
-# Perplexity (standard in VQ-VAE)
-# metrics for codebook efficiency
-p = token_counts / token_counts.sum()
-perplexity = torch.exp(-(p * torch.log(p + 1e-10)).sum())
-
-print("==> Perplexity: torch.exp(-(p * torch.log(p + 1e-10)).sum())")
-print("\t",perplexity)
-print("\tIs it better than 10% of K=",K ," ?")
-
-# Compare two classes (e.g. b vs c)
-c1, c2 = 6, 5  # example: b vs c
-score = token_probs[c1] / (token_probs[c2] + 1e-6)
-# Most discriminating tokens
-top_tokens = torch.argsort(score, descending=True)[:10]
-print("==> Top 10 tokens for b vs. c discrimination:")
-print("\t", top_tokens)
-# s vs. d
-c1, c2 = 4, 3
-score = token_probs[c1] / (token_probs[c2] + 1e-6)
-top_tokens = torch.argsort(score, descending=True)[:10]
-print("==> Top 10 tokens for s vs. d discrimination:")
-print("\t", top_tokens)
-# g vs. d
-c1, c2 = 1, 3
-score = token_probs[c1] / (token_probs[c2] + 1e-6)
-top_tokens = torch.argsort(score, descending=True)[:10]
-print("==> Top 10 tokens for g vs. d discrimination:")
-print("\t", top_tokens)
+##token_counts = torch.zeros(n_classes, K)
+##
+##for tokens, mask, labels in train_loader:
+##    for c in range(n_classes):
+##        mask_c = (labels == c)
+##
+##        if mask_c.sum() == 0:
+##            continue
+##
+##        t = tokens[mask_c]           # [Nc, N]
+##        m = mask[mask_c]
+##
+##        t = t[m.bool()]              # flatten valid tokens
+##        counts = torch.bincount(t, minlength=K)
+##
+##        token_counts[c] += counts
+##
+### Normalize ->  probability
+##token_probs = token_counts / token_counts.sum(dim=1, keepdim=True)
+##
+### Perplexity (standard in VQ-VAE)
+### metrics for codebook efficiency
+##p = token_counts / token_counts.sum()
+##perplexity = torch.exp(-(p * torch.log(p + 1e-10)).sum())
+##
+##print("==> Perplexity: torch.exp(-(p * torch.log(p + 1e-10)).sum())")
+##print("\t",perplexity)
+##print("\tIs it better than 10% of K=",K ," ?")
+##
+### Compare two classes (e.g. b vs c)
+##c1, c2 = 6, 5  # example: b vs c
+##score = token_probs[c1] / (token_probs[c2] + 1e-6)
+### Most discriminating tokens
+##top_tokens = torch.argsort(score, descending=True)[:10]
+##print("==> Top 10 tokens for b vs. c discrimination:")
+##print("\t", top_tokens)
+### s vs. d
+##c1, c2 = 4, 3
+##score = token_probs[c1] / (token_probs[c2] + 1e-6)
+##top_tokens = torch.argsort(score, descending=True)[:10]
+##print("==> Top 10 tokens for s vs. d discrimination:")
+##print("\t", top_tokens)
+### g vs. d
+##c1, c2 = 1, 3
+##score = token_probs[c1] / (token_probs[c2] + 1e-6)
+##top_tokens = torch.argsort(score, descending=True)[:10]
+##print("==> Top 10 tokens for g vs. d discrimination:")
+##print("\t", top_tokens)
 
 ### FIXME TO-DO 
 ### Extract PF features assigned to top-ranked token

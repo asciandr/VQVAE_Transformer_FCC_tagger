@@ -6,7 +6,9 @@ import psutil, os
 process = psutil.Process(os.getpid())
 
 ### job handles ###
+IO_BATCH = 4096     # efficient disk read
 input_data_dir="/gpfs01/usfcc/asciandra/tokenization/"
+#input_data_dir="/gpfs01/usfcc/asciandra/tokenization/TEST/"
 n_classes=7
 # training of Transformer-based classifier
 m_epochs=100
@@ -22,12 +24,39 @@ K=256
 # VQ-VAE config
 vqvaeconfig="selfAttention_decay099_sup_detachedClassifier_lambda001_K256_D64"#"sup_K512_D128"#"sup_K512_D64"#"K512_D64"#"K512_D128"
 N_FEAT=35
-# RANDOMIZED TOKENS CHECK?
-dorandomtokens=False#True
 
 #########################################
 #### STEP 1: LOAD TOKENIZED DATASETS ####
 #########################################
+
+import h5py
+# Dataset class
+class H5JetDataset(torch.utils.data.Dataset):
+    def __init__(self, file_path, io_batch_size):
+        self.file = h5py.File(file_path, "r")
+
+        self.X = self.file["X"]
+        self.mask = self.file["mask"]
+        self.jet_pt = self.file["jet_pt"]
+        self.labels = self.file["labels"]
+
+        self.io_batch_size = io_batch_size
+        self.N = self.X.shape[0]
+
+    def __len__(self):
+        return self.N // self.io_batch_size
+
+    def __getitem__(self, idx):
+        start = idx * self.io_batch_size
+        end = start + self.io_batch_size
+
+        return (
+            torch.from_numpy(self.X[start:end]),
+            torch.from_numpy(self.mask[start:end]),
+            torch.from_numpy(self.jet_pt[start:end]),
+            torch.from_numpy(self.labels[start:end])
+        )
+
 
 #load data
 print("==> Loading the dataset.")
@@ -40,29 +69,40 @@ import torch
 torch.set_num_threads(1)
 
 #Load
-data = torch.load(input_data_dir+vqvaeconfig+"_tokenized_dataset.pt", map_location="cpu")
-TOKENS = data["tokens"]
-MASKS  = data["mask"]
-LABELS = data["labels"]
-from torch.utils.data import Dataset
-class TokenDataset(Dataset):
-    def __init__(self, tokens, mask, labels):
-        self.tokens = tokens
-        self.mask = mask
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return (
-            self.tokens[idx],
-            self.mask[idx],
-            self.labels[idx]
-        )
+dataset     = H5JetDataset(input_data_dir + "train_standardized.h5",    io_batch_size=IO_BATCH)
+loader = torch.utils.data.DataLoader(
+    dataset,
+    batch_size=None,   # IMPORTANT
+    shuffle=False,
+    pin_memory=True,
+    num_workers=0      # IMPORTANT
+)
+#data = torch.load(input_data_dir+"train_standardized.h5", map_location="cpu")
+#data = torch.load(input_data_dir+vqvaeconfig+"_tokenized_dataset.pt", map_location="cpu")
+# continuous PF features
+#TOKENS = data["X"]
+##TOKENS = data["tokens"]
+#MASKS  = data["mask"]
+#LABELS = data["labels"]
+#from torch.utils.data import Dataset
+#class TokenDataset(Dataset):
+#    def __init__(self, tokens, mask, labels):
+#        self.tokens = tokens
+#        self.mask = mask
+#        self.labels = labels
+#
+#    def __len__(self):
+#        return len(self.labels)
+#
+#    def __getitem__(self, idx):
+#        return (
+#            self.tokens[idx],
+#            self.mask[idx],
+#            self.labels[idx]
+#        )
 from torch.utils.data import random_split
 
-dataset = TokenDataset(TOKENS, MASKS, LABELS)
+#dataset = TokenDataset(TOKENS, MASKS, LABELS)
 
 n_total = len(dataset)
 n_train = int(0.9 * n_total)
@@ -73,7 +113,7 @@ from torch.utils.data import DataLoader
 
 train_loader = DataLoader(
     train_dataset,
-    batch_size=64,
+    batch_size=None,
     shuffle=True,
     num_workers=0,      # keep this
     pin_memory=False
@@ -81,7 +121,7 @@ train_loader = DataLoader(
 
 val_loader = DataLoader(
     val_dataset,
-    batch_size=64,
+    batch_size=None,
     shuffle=False,
     num_workers=0,
     pin_memory=False
@@ -89,11 +129,11 @@ val_loader = DataLoader(
 
 # Compute class weights
 # to compensate class imbalance
-counts = torch.bincount(LABELS)
-weights = 1.0 / counts.float()
-weights = weights / weights.sum() * len(counts)
-print("==> Weights to compensate class imbalance")
-print("\t",weights)
+#counts = torch.bincount(LABELS)
+#weights = 1.0 / counts.float()
+#weights = weights / weights.sum() * len(counts)
+#print("==> Weights to compensate class imbalance")
+#print("\t",weights)
 
 #################################################
 #### STEP 2: TRAIN A TRANSFORMER CLASSIFIER  ####
@@ -131,9 +171,12 @@ class JetTransformer(nn.Module):
         )
 
     # standard token model
-    def forward(self, tokens, mask):
+    def forward(self, x, mask):
         # tokens: [B, N]
-        x = self.embedding(tokens)   # [B, N, d_model]
+        #x = self.embedding(tokens)   # [B, N, d_model]
+        # x: [B, N, F]
+        # mask: [B, N]
+        x = self.input_proj(x)   # linear F → d_model
 
         # attention mask (True = ignore)
         attn_mask = ~mask.bool()
@@ -170,15 +213,12 @@ def evaluate(model, loader):
     total_loss = 0.0
 
     with torch.no_grad():
-        for tokens, mask, labels in loader:
-            tokens = tokens.cuda()
+        for x, mask, jet_pt, labels in loader:
+            x = x.cuda()
             mask   = mask.cuda()
             labels = labels.cuda()
-            # RANDOMIZE CHECK -> take tokens & destroy structure
-            if dorandomtokens:
-                tokens = tokens[torch.randperm(tokens.size(0))]
 
-            logits = model(tokens, mask)
+            logits = model(x, mask)
             loss = criterion(logits, labels)
 
             total_loss += loss.item()
@@ -190,7 +230,7 @@ def evaluate(model, loader):
 tf_model = JetTransformer(num_tokens=K, num_classes=n_classes).cuda()
 
 optimizer = torch.optim.AdamW(tf_model.parameters(), lr=5e-5)
-criterion = nn.CrossEntropyLoss(weight=weights.cuda())
+criterion = nn.CrossEntropyLoss()#weight=weights.cuda())
 
 # Add Gradient Clipping 
 # to stabilize the training
@@ -209,17 +249,16 @@ for epoch in range(m_epochs):
     #print("\ttorch.cuda.memory_allocated() / 1024**2 = ", torch.cuda.memory_allocated() / 1024**2, "MB")
     #print("\ttorch.cuda.max_memory_allocated() / 1024**2 = ", torch.cuda.max_memory_allocated() / 1024**2, "MB")
     #print("RAM (GB):", process.memory_info().rss / 1024**3)
-    for tokens, mask, labels in train_loader:
-        tokens = tokens.cuda(non_blocking=True)
+    for x, mask, jet_pt, labels in train_loader:
+        x = x.cuda(non_blocking=True)
         mask = mask.cuda(non_blocking=True)
         labels = labels.cuda(non_blocking=True)
         # RANDOMIZE CHECK -> take tokens & destroy structure
-        if dorandomtokens:
-            tokens = tokens[torch.randperm(tokens.size(0))]
+        #tokens = tokens[torch.randperm(tokens.size(0))]
 
         optimizer.zero_grad()
 
-        logits = tf_model(tokens, mask)
+        logits = tf_model(x, mask)
         loss = criterion(logits, labels)
 
         loss.backward()
